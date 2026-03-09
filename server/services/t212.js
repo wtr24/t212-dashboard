@@ -6,13 +6,12 @@ const BASE = 'https://live.trading212.com/api/v0';
 
 function buildAuth() {
   const key = process.env.T212_API_KEY;
-  const secret = process.env.T212_API_SECRET;
-  if (!key || !secret) return null;
-  return `Basic ${Buffer.from(`${key}:${secret}`).toString('base64')}`;
+  if (!key) return null;
+  return key;
 }
 
 function hasKey() {
-  return !!(process.env.T212_API_KEY && process.env.T212_API_SECRET);
+  return !!process.env.T212_API_KEY;
 }
 
 function client() {
