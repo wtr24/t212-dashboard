@@ -1,2 +1,7 @@
 .spin { animation: spin 1s linear infinite; }
-@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+.card-hover { transition: transform 0.2s, box-shadow 0.2s; }
+.card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+
+input:focus { outline: none; border-color: var(--accent) !important; }
+button:hover { opacity: 0.85; }

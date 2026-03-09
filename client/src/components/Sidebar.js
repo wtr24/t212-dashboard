@@ -5,31 +5,43 @@ const nav = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'positions', label: 'Positions', icon: TrendingUp },
   { id: 'charts', label: 'Charts', icon: BarChart3 },
-  { id: 'predictions', label: 'Predictions', icon: Cpu },
+  { id: 'predictions', label: 'AI Signals', icon: Cpu },
   { id: 'history', label: 'History', icon: History },
   { id: 'dividends', label: 'Dividends', icon: Coins },
   { id: 'settings', label: 'Settings', icon: Settings },
 ];
 
-const s = {
-  sidebar: { width: 220, background: 'var(--surface)', borderRight: '1px solid var(--border)', padding: '24px 16px', display: 'flex', flexDirection: 'column', gap: 8, flexShrink: 0 },
-  logo: { fontFamily: 'Space Mono, monospace', fontSize: 14, fontWeight: 700, color: 'var(--accent)', marginBottom: 24, padding: '0 8px', letterSpacing: 2 },
-  item: (active) => ({ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 8, cursor: 'pointer', transition: 'all 0.15s', background: active ? 'var(--accent-glow)' : 'transparent', color: active ? 'var(--accent)' : 'var(--muted)', border: active ? '1px solid rgba(0,255,136,0.2)' : '1px solid transparent', fontSize: 14, fontWeight: active ? 600 : 400 }),
-};
-
 export default function Sidebar({ active, onNav }) {
   return (
-    <div style={s.sidebar}>
-      <div style={s.logo}>T212 PRO</div>
-      {nav.map(({ id, label, Icon = item => item.icon }) => {
-        const NavIcon = nav.find(n => n.id === id)?.icon;
-        return (
-          <motion.div key={id} style={s.item(active === id)} onClick={() => onNav(id)} whileHover={{ x: 2 }} whileTap={{ scale: 0.97 }}>
-            {NavIcon && <NavIcon size={16} />}
-            <span>{label}</span>
-          </motion.div>
-        );
-      })}
+    <div style={{ width: 230, background: 'var(--surface)', borderRight: '1px solid var(--border)', padding: '28px 14px', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+      <div style={{ padding: '4px 12px 32px' }}>
+        <div style={{ fontFamily: 'Space Mono, monospace', fontSize: 13, fontWeight: 700, color: 'var(--accent)', letterSpacing: 3 }}>T212</div>
+        <div style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: 2, marginTop: 2 }}>PORTFOLIO PRO</div>
+      </div>
+
+      <div style={{ fontSize: 10, color: 'var(--text-3)', letterSpacing: 2, padding: '0 12px', marginBottom: 8 }}>MENU</div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {nav.map(({ id, label, icon: Icon }) => {
+          const isActive = active === id;
+          return (
+            <motion.div key={id} onClick={() => onNav(id)} whileTap={{ scale: 0.97 }}
+              style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, cursor: 'pointer', position: 'relative', background: isActive ? 'var(--accent-dim)' : 'transparent', color: isActive ? 'var(--accent)' : 'var(--text-2)', transition: 'all 0.15s', fontWeight: isActive ? 600 : 400, fontSize: 14 }}>
+              {isActive && <motion.div layoutId="sidebar-active" style={{ position: 'absolute', inset: 0, borderRadius: 10, border: '1px solid var(--accent-border)', background: 'var(--accent-dim)' }} transition={{ duration: 0.2 }} />}
+              <Icon size={15} style={{ position: 'relative', flexShrink: 0 }} />
+              <span style={{ position: 'relative' }}>{label}</span>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      <div style={{ marginTop: 'auto', padding: '16px 12px 0', borderTop: '1px solid var(--border)' }}>
+        <div style={{ fontSize: 11, color: 'var(--text-3)' }}>Auto-syncing every 30s</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6 }}>
+          <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--gain)', boxShadow: '0 0 6px var(--gain)', animation: 'pulse 2s infinite' }} />
+          <span style={{ fontSize: 11, color: 'var(--gain)' }}>Live</span>
+        </div>
+      </div>
     </div>
   );
 }

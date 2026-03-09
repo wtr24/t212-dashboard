@@ -4,7 +4,7 @@ import { useApi } from '../hooks/useApi';
 import OutlookBadge from '../components/OutlookBadge';
 import { ChevronDown, ChevronUp, Search } from 'lucide-react';
 
-const col = { fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, cursor: 'pointer', userSelect: 'none', padding: '12px 16px', whiteSpace: 'nowrap' };
+const col = { fontSize: 11, fontWeight: 600, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 0.8, cursor: 'pointer', userSelect: 'none', padding: '12px 16px', whiteSpace: 'nowrap' };
 const cell = { padding: '14px 16px', fontSize: 13, borderBottom: '1px solid var(--border)' };
 
 export default function Positions() {

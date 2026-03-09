@@ -1,45 +1,41 @@
 import { motion } from 'framer-motion';
+import { TrendingUp, TrendingDown, DollarSign, Activity } from 'lucide-react';
 import { usePortfolio } from '../hooks/useApi';
 import CountUp from '../components/CountUp';
 import FearGreedGauge from '../components/FearGreedGauge';
 import TickerBanner from '../components/TickerBanner';
 import OutlookBadge from '../components/OutlookBadge';
+import { SkeletonMetric, Skeleton } from '../components/Skeleton';
 
-function BigValue({ value, loading }) {
-  if (loading) return <div className="mono" style={{ fontSize: 56, fontWeight: 700, color: 'var(--accent)', opacity: 0.3 }}>£--,---.--</div>;
-  return (
-    <motion.div className="mono" initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.6, ease: 'easeOut' }}
-      style={{ fontSize: 56, fontWeight: 700, color: 'var(--accent)', textShadow: '0 0 40px rgba(0,255,136,0.3)' }}>
-      £<CountUp value={value} decimals={2} duration={1500} />
-    </motion.div>
-  );
-}
-
-function MetricRow({ label, value, prefix = '£', pct, loading }) {
+function StatCard({ label, value, prefix = '£', suffix = '', change, icon: Icon, delay = 0, loading }) {
   const num = parseFloat(value) || 0;
-  const isPos = num >= 0;
+  const isPos = change !== undefined ? change >= 0 : num >= 0;
   return (
-    <div style={{ textAlign: 'center' }}>
-      <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>{label}</div>
-      <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: loading ? 'var(--muted)' : isPos ? 'var(--accent)' : 'var(--danger)' }}>
-        {loading ? '--' : <>{prefix}<CountUp value={Math.abs(num)} decimals={2} /></>}
-      </div>
-      {pct !== undefined && !loading && <div style={{ fontSize: 11, color: isPos ? 'var(--accent)' : 'var(--danger)' }}>{isPos ? '▲' : '▼'} {Math.abs(pct).toFixed(2)}%</div>}
-    </div>
+    <motion.div className="card" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay, duration: 0.35 }}
+      style={{ padding: '22px 24px', flex: 1, minWidth: 160 }}>
+      {loading ? <SkeletonMetric /> : <>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+          <span className="label">{label}</span>
+          {Icon && <div style={{ padding: 8, borderRadius: 8, background: isPos ? 'var(--gain-dim)' : 'var(--loss-dim)' }}>
+            <Icon size={14} color={isPos ? 'var(--gain)' : 'var(--loss)'} />
+          </div>}
+        </div>
+        <div className="mono" style={{ fontSize: 24, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
+          {prefix}<CountUp value={Math.abs(num)} decimals={2} />{suffix}
+        </div>
+        {change !== undefined && (
+          <div style={{ fontSize: 12, color: isPos ? 'var(--gain)' : 'var(--loss)', display: 'flex', alignItems: 'center', gap: 4 }}>
+            {isPos ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+            {isPos ? '+' : ''}{change.toFixed(2)}%
+          </div>
+        )}
+      </>}
+    </motion.div>
   );
 }
 
-function QuickCard({ title, ticker, value, pct, delay }) {
-  const isPos = (parseFloat(pct) || 0) >= 0;
-  return (
-    <motion.div className="glass" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay }}
-      style={{ padding: 16, flex: 1, minWidth: 160 }}>
-      <div style={{ fontSize: 11, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 8 }}>{title}</div>
-      <div style={{ fontWeight: 700, fontSize: 15 }}>{ticker || '—'}</div>
-      {value && <div className="mono" style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>£{(parseFloat(value) || 0).toFixed(2)}</div>}
-      {pct !== undefined && <div style={{ fontSize: 12, color: isPos ? 'var(--accent)' : 'var(--danger)', marginTop: 2 }}>{isPos ? '+' : ''}{(parseFloat(pct) || 0).toFixed(2)}%</div>}
-    </motion.div>
-  );
+function SectionLabel({ children }) {
+  return <div className="label" style={{ marginBottom: 14, marginTop: 8 }}>{children}</div>;
 }
 
 export default function Dashboard() {
@@ -47,52 +43,96 @@ export default function Dashboard() {
   const s = summary.data || {};
   const pos = positions.data || [];
   const fg = fearGreed.data || {};
-
   const sorted = [...pos].sort((a, b) => (b.ppl || 0) - (a.ppl || 0));
   const best = sorted[0];
   const worst = sorted[sorted.length - 1];
-  const biggest = [...pos].sort((a, b) => (b.currentPrice * b.quantity) - (a.currentPrice * a.quantity))[0];
 
   return (
-    <div>
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <div style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 3, marginBottom: 12 }}>Total Portfolio Value</div>
-        <BigValue value={s.totalValue} loading={summary.loading} />
-        <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 8 }}>ISA Account · GBP</div>
-      </div>
+    <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
+        style={{ marginBottom: 32 }}>
+        <div className="label" style={{ marginBottom: 10 }}>Total Portfolio Value</div>
+        {summary.loading
+          ? <Skeleton width={280} height={52} style={{ marginBottom: 8 }} />
+          : <div className="mono" style={{ fontSize: 52, fontWeight: 700, color: 'var(--text)', lineHeight: 1, marginBottom: 8 }}>
+              £<CountUp value={s.totalValue || 0} decimals={2} duration={1400} />
+            </div>
+        }
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {!summary.loading && s.totalPnl !== undefined && (
+            <>
+              <span style={{ fontSize: 13, color: (s.totalPnl || 0) >= 0 ? 'var(--gain)' : 'var(--loss)', fontWeight: 600 }}>
+                {(s.totalPnl || 0) >= 0 ? '+' : ''}£{Math.abs(s.totalPnl || 0).toFixed(2)} all time
+              </span>
+              <span style={{ color: 'var(--border)' }}>·</span>
+              <span style={{ fontSize: 13, color: 'var(--text-2)' }}>ISA Account · GBP</span>
+            </>
+          )}
+        </div>
+      </motion.div>
 
-      <div style={{ display: 'flex', gap: 40, justifyContent: 'center', marginBottom: 32, flexWrap: 'wrap' }}>
-        <MetricRow label="Total P&L" value={s.totalPnl} pct={s.returnPct} loading={summary.loading} />
-        <MetricRow label="Daily P&L" value={s.cash?.result} loading={summary.loading} />
-        <MetricRow label="Free Cash" value={s.cash?.free} loading={summary.loading} />
-        <MetricRow label="Invested" value={s.cash?.invested} loading={summary.loading} />
-        <MetricRow label="Return" value={s.returnPct} prefix="" suffix="%" loading={summary.loading} />
+      <div style={{ display: 'flex', gap: 12, marginBottom: 28, flexWrap: 'wrap' }}>
+        {summary.loading
+          ? [0,1,2,3,4].map(i => <SkeletonMetric key={i} />)
+          : <>
+            <StatCard label="Total Return" value={s.totalPnl} change={s.returnPct} icon={TrendingUp} delay={0.05} />
+            <StatCard label="Daily P&L" value={s.cash?.result} icon={Activity} delay={0.1} />
+            <StatCard label="Free Cash" value={s.cash?.free} icon={DollarSign} delay={0.15} />
+            <StatCard label="Invested" value={s.cash?.invested} icon={DollarSign} delay={0.2} />
+            <StatCard label="Return %" value={s.returnPct} prefix="" suffix="%" delay={0.25} />
+          </>
+        }
       </div>
 
       <TickerBanner positions={pos} />
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 200px', gap: 24, marginBottom: 24 }}>
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-          <QuickCard title="Best Position" ticker={best?.ticker} value={best?.ppl} pct={best ? ((best.ppl || 0) / (best.averagePrice * best.quantity) * 100) : 0} delay={0.1} />
-          <QuickCard title="Worst Position" ticker={worst?.ticker} value={worst?.ppl} pct={worst ? ((worst.ppl || 0) / (worst.averagePrice * worst.quantity) * 100) : 0} delay={0.15} />
-          <QuickCard title="Biggest Holding" ticker={biggest?.ticker} value={biggest ? biggest.currentPrice * biggest.quantity : 0} delay={0.2} />
-          <QuickCard title="Positions" ticker={`${pos.length} stocks`} delay={0.25} />
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 220px', gap: 20, marginBottom: 28 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          {[
+            { label: 'Best Position', ticker: best?.ticker, val: best?.ppl, pos: true },
+            { label: 'Worst Position', ticker: worst?.ticker, val: worst?.ppl, pos: false },
+            { label: 'Holdings', ticker: `${pos.length} stocks`, val: null },
+            { label: 'Biggest Position', ticker: pos.sort?.((a,b)=>(b.currentPrice*b.quantity)-(a.currentPrice*a.quantity))[0]?.ticker, val: null },
+          ].map(({ label, ticker, val, pos: isPos }, i) => (
+            <motion.div key={label} className="card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.05 }}
+              style={{ padding: '18px 20px' }}>
+              <div className="label" style={{ marginBottom: 10 }}>{label}</div>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>{ticker || '—'}</div>
+              {val !== undefined && val !== null && (
+                <div style={{ fontSize: 12, color: isPos ? 'var(--gain)' : 'var(--loss)', marginTop: 4 }}>
+                  {val >= 0 ? '+' : ''}£{Math.abs(val).toFixed(2)}
+                </div>
+              )}
+            </motion.div>
+          ))}
         </div>
-        <motion.div className="glass" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}>
+
+        <motion.div className="card" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.3 }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <FearGreedGauge score={fg.score} rating={fg.rating} />
         </motion.div>
       </div>
 
-      {pos.length > 0 && (
+      {pos.filter(p => p.analysis).length > 0 && (
         <div>
-          <div style={{ fontSize: 13, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 16 }}>AI Analysis · Top Positions</div>
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+          <SectionLabel>AI Signals</SectionLabel>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
             {pos.filter(p => p.analysis).slice(0, 6).map((p, i) => (
-              <motion.div key={p.ticker} className="glass" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.06 }}
-                style={{ padding: '12px 16px', minWidth: 180, flex: 1 }}>
-                <div style={{ fontWeight: 700, marginBottom: 8 }}>{p.ticker}</div>
-                <OutlookBadge outlook={p.analysis?.outlook} confidence={p.analysis?.confidence} risk={p.analysis?.risk_level} />
-                {p.analysis?.reason && <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 8, lineHeight: 1.5 }}>{p.analysis.reason}</div>}
+              <motion.div key={p.ticker} className="card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+                style={{ padding: '18px 20px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                  <div style={{ fontWeight: 700 }}>{p.ticker}</div>
+                  <OutlookBadge outlook={p.analysis?.outlook} confidence={p.analysis?.confidence} risk={p.analysis?.risk_level} />
+                </div>
+                {p.analysis?.reason && <div style={{ fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>{p.analysis.reason}</div>}
+                {p.analysis?.confidence !== undefined && (
+                  <div style={{ marginTop: 12 }}>
+                    <div style={{ height: 3, background: 'var(--surface-2)', borderRadius: 2, overflow: 'hidden' }}>
+                      <motion.div initial={{ width: 0 }} animate={{ width: `${p.analysis.confidence}%` }} transition={{ delay: i * 0.05 + 0.4, duration: 0.6 }}
+                        style={{ height: '100%', background: p.analysis.outlook === 'BULLISH' ? 'var(--gain)' : p.analysis.outlook === 'BEARISH' ? 'var(--loss)' : 'var(--warning)', borderRadius: 2 }} />
+                    </div>
+                  </div>
+                )}
               </motion.div>
             ))}
           </div>

@@ -1,12 +1,16 @@
 export default function OutlookBadge({ outlook, confidence, risk }) {
-  const colors = { BULLISH: { bg: 'rgba(0,255,136,0.1)', border: 'rgba(0,255,136,0.3)', text: 'var(--accent)' }, BEARISH: { bg: 'rgba(255,50,87,0.1)', border: 'rgba(255,50,87,0.3)', text: 'var(--danger)' }, NEUTRAL: { bg: 'rgba(255,184,0,0.1)', border: 'rgba(255,184,0,0.3)', text: 'var(--warning)' } };
-  const riskColors = { LOW: 'var(--accent)', MED: 'var(--warning)', HIGH: 'var(--danger)' };
-  const c = colors[outlook] || colors.NEUTRAL;
+  const map = {
+    BULLISH: { bg: 'var(--gain-dim)', color: 'var(--gain)', border: 'rgba(34,197,94,0.2)' },
+    BEARISH: { bg: 'var(--loss-dim)', color: 'var(--loss)', border: 'rgba(239,68,68,0.2)' },
+    NEUTRAL: { bg: 'rgba(245,158,11,0.1)', color: 'var(--warning)', border: 'rgba(245,158,11,0.2)' },
+  };
+  const riskColor = { LOW: 'var(--gain)', MED: 'var(--warning)', HIGH: 'var(--loss)' };
+  const c = map[outlook] || map.NEUTRAL;
   return (
-    <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-      <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, background: c.bg, border: `1px solid ${c.border}`, color: c.text, fontWeight: 700 }}>{outlook || 'N/A'}</span>
-      {confidence !== undefined && <span className="mono" style={{ fontSize: 10, color: 'var(--muted)' }}>{confidence}%</span>}
-      {risk && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: 'var(--glass)', border: '1px solid var(--border)', color: riskColors[risk] || 'var(--muted)' }}>{risk}</span>}
+    <div style={{ display: 'flex', gap: 5, alignItems: 'center', flexWrap: 'wrap' }}>
+      <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 5, background: c.bg, border: `1px solid ${c.border}`, color: c.color, letterSpacing: 0.5 }}>{outlook || 'N/A'}</span>
+      {confidence !== undefined && <span className="mono" style={{ fontSize: 10, color: 'var(--text-2)' }}>{confidence}%</span>}
+      {risk && <span style={{ fontSize: 10, fontWeight: 600, color: riskColor[risk] || 'var(--text-2)' }}>{risk}</span>}
     </div>
   );
 }
