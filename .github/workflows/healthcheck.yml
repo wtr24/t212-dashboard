@@ -1,0 +1,53 @@
+name: Post-Deploy Healthcheck
+
+on:
+  workflow_run:
+    workflows: ["Build, Push & Deploy"]
+    types: [completed]
+
+jobs:
+  healthcheck:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    steps:
+      - name: Wait for containers
+        run: sleep 30
+
+      - name: Check health endpoint
+        id: health
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 10 \
+            http://${{ secrets.NAS_HOST }}:3002/api/health 2>/dev/null || echo "000")
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "Health check returned: $STATUS"
+          [ "$STATUS" = "200" ] || exit 1
+
+      - name: Notify Discord (healthy)
+        if: success()
+        run: |
+          curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"content\": \"🟢 **T212 Dashboard healthy** at http://${{ secrets.NAS_HOST }}:3002\"}"
+
+      - name: Trigger rollback on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.actions.createWorkflowDispatch({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'rollback.yml',
+              ref: 'main',
+              inputs: {
+                image_tag: 'latest'
+              }
+            });
+
+      - name: Notify Discord (unhealthy)
+        if: failure()
+        run: |
+          curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"content\": \"🔴 **T212 Dashboard healthcheck FAILED** — triggering auto-rollback\"}"

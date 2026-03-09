@@ -1,55 +1,76 @@
 version: '3.8'
 services:
   postgres:
-    image: postgres:16
+    image: postgres:16-alpine
     environment:
       POSTGRES_DB: t212
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_USER: t212
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required}
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    restart: unless-stopped
+      - postgres-data:/var/lib/postgresql/data
+    restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U t212"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7-alpine
-    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
-  server:
-    image: wtr24dev/t212-api:latest
+  api:
+    image: wtr24/t212-api:latest
+    ports:
+      - "5002:5002"
+    env_file: .env
     environment:
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-changeme}@postgres:5432/t212
+      - DATABASE_URL=postgresql://t212:${POSTGRES_PASSWORD}@postgres:5432/t212
       - REDIS_URL=redis://redis:6379
-      - T212_API_KEY=${T212_API_KEY}
-      - GROQ_API_KEY=${GROQ_API_KEY}
-      - ALPHA_VANTAGE_KEY=${ALPHA_VANTAGE_KEY}
       - PORT=5002
       - NODE_ENV=production
     depends_on:
       postgres:
         condition: service_healthy
       redis:
-        condition: service_started
-    restart: unless-stopped
+        condition: service_healthy
+    restart: always
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5002/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
   client:
-    image: wtr24dev/t212-client:latest
+    image: wtr24/t212-client:latest
     ports:
       - "3002:80"
     depends_on:
-      - server
-    restart: unless-stopped
+      - api
+    restart: always
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
 
   watchtower:
     image: containrrr/watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-    command: --interval 300 wtr24dev/t212-api wtr24dev/t212-client
-    restart: unless-stopped
+    environment:
+      - WATCHTOWER_POLL_INTERVAL=30
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_LABEL_ENABLE=true
+    restart: always
 
 volumes:
-  pgdata:
+  postgres-data:
+  redis-data:

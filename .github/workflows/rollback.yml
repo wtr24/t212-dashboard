@@ -1,0 +1,49 @@
+name: Manual Rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Image tag to rollback to (e.g. sha-abc1234)'
+        required: true
+        type: string
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rollback on NAS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.NAS_HOST }}
+          username: ${{ secrets.NAS_SSH_USER }}
+          key: ${{ secrets.NAS_SSH_KEY }}
+          port: 22
+          script: |
+            cd /volume1/docker/t212-dashboard
+            sed -i "s|wtr24/t212-api:.*|wtr24/t212-api:${{ inputs.image_tag }}|g" docker-compose.yml
+            sed -i "s|wtr24/t212-client:.*|wtr24/t212-client:${{ inputs.image_tag }}|g" docker-compose.yml
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker compose ps
+
+      - name: Verify rollback
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.NAS_HOST }}
+          username: ${{ secrets.NAS_SSH_USER }}
+          key: ${{ secrets.NAS_SSH_KEY }}
+          port: 22
+          script: |
+            sleep 15
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5002/api/health)
+            echo "Health check after rollback: $STATUS"
+            exit $([ "$STATUS" = "200" ] && echo 0 || echo 1)
+
+      - name: Notify Discord
+        if: always()
+        run: |
+          RESULT="${{ job.status == 'success' && '✅ ROLLED BACK' || '❌ ROLLBACK FAILED' }}"
+          curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
+            -H "Content-Type: application/json" \
+            -d "{\"content\": \"$RESULT to \`${{ inputs.image_tag }}\` — triggered by ${{ github.actor }}\"}"
