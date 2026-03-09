@@ -2,13 +2,16 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApi } from '../hooks/useApi';
 import OutlookBadge from '../components/OutlookBadge';
+import DataBanner from '../components/DataBanner';
+import { SkeletonRow } from '../components/Skeleton';
 import { ChevronDown, ChevronUp, Search } from 'lucide-react';
 
 const col = { fontSize: 11, fontWeight: 600, color: 'var(--text-2)', textTransform: 'uppercase', letterSpacing: 0.8, cursor: 'pointer', userSelect: 'none', padding: '12px 16px', whiteSpace: 'nowrap' };
 const cell = { padding: '14px 16px', fontSize: 13, borderBottom: '1px solid var(--border)' };
 
 export default function Positions() {
-  const { data: pos = [], loading } = useApi('/portfolio/positions');
+  const { data: raw, loading, refetch } = useApi('/portfolio/positions', { pollInterval: 60000 });
+  const pos = raw?.positions || raw || [];
   const [sortKey, setSortKey] = useState('ppl');
   const [sortDir, setSortDir] = useState(-1);
   const [search, setSearch] = useState('');
@@ -25,10 +28,9 @@ export default function Positions() {
 
   const SortIcon = ({ k }) => sortKey === k ? (sortDir === -1 ? <ChevronDown size={12} /> : <ChevronUp size={12} />) : null;
 
-  if (loading) return <div style={{ color: 'var(--muted)', padding: 40, textAlign: 'center' }}>Loading positions...</div>;
-
   return (
     <div>
+      <DataBanner source={raw?.source} age={raw?.age} onRefresh={refetch} />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h2 style={{ fontSize: 20, fontWeight: 700 }}>Positions <span style={{ color: 'var(--muted)', fontWeight: 400, fontSize: 14 }}>({sorted.length})</span></h2>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'var(--glass)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px' }}>

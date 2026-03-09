@@ -1,7 +1,7 @@
 const { Pool } = require('pg');
 
 const pool = process.env.DATABASE_URL
-  ? new Pool({ connectionString: process.env.DATABASE_URL })
+  ? new Pool({ connectionString: process.env.DATABASE_URL, max: 10, idleTimeoutMillis: 30000 })
   : null;
 
 async function initDB() {
@@ -18,6 +18,13 @@ async function initDB() {
       market_value DECIMAL,
       raw_data JSONB,
       created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS account_cache (
+      id SERIAL PRIMARY KEY,
+      key VARCHAR(50) UNIQUE NOT NULL,
+      raw_data JSONB,
       updated_at TIMESTAMP DEFAULT NOW()
     );
 

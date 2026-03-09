@@ -6,6 +6,7 @@ import FearGreedGauge from '../components/FearGreedGauge';
 import TickerBanner from '../components/TickerBanner';
 import OutlookBadge from '../components/OutlookBadge';
 import { SkeletonMetric, Skeleton } from '../components/Skeleton';
+import DataBanner from '../components/DataBanner';
 
 function StatCard({ label, value, prefix = '£', suffix = '', change, icon: Icon, delay = 0, loading }) {
   const num = parseFloat(value) || 0;
@@ -41,7 +42,7 @@ function SectionLabel({ children }) {
 export default function Dashboard() {
   const { summary, positions, fearGreed } = usePortfolio();
   const s = summary.data || {};
-  const pos = positions.data || [];
+  const pos = (positions.data?.positions || positions.data || []);
   const fg = fearGreed.data || {};
   const sorted = [...pos].sort((a, b) => (b.ppl || 0) - (a.ppl || 0));
   const best = sorted[0];
@@ -49,6 +50,7 @@ export default function Dashboard() {
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
+      <DataBanner source={summary.data?.meta?.portfolioSource} age={summary.data?.meta?.portfolioAge} onRefresh={() => { summary.refetch(); positions.refetch(); }} />
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
         style={{ marginBottom: 32 }}>
         <div className="label" style={{ marginBottom: 10 }}>Total Portfolio Value</div>

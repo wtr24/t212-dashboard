@@ -1,123 +1,187 @@
 const axios = require('axios');
 const redis = require('./cache');
+const { query } = require('../models/db');
 
 const BASE = 'https://live.trading212.com/api/v0';
 
-const MOCK_PORTFOLIO = [
-  { ticker: 'AAPL', fullName: 'Apple Inc', quantity: 10, averagePrice: 175.20, currentPrice: 182.50, ppl: 73.00, fxPpl: 0, initialFillDate: '2024-01-15T10:00:00Z' },
-  { ticker: 'TSLA', fullName: 'Tesla Inc', quantity: 5, averagePrice: 220.00, currentPrice: 195.30, ppl: -123.50, fxPpl: 0, initialFillDate: '2024-02-01T10:00:00Z' },
-  { ticker: 'NVDA', fullName: 'NVIDIA Corp', quantity: 8, averagePrice: 480.00, currentPrice: 875.50, ppl: 3164.00, fxPpl: 0, initialFillDate: '2023-11-10T10:00:00Z' },
-  { ticker: 'MSFT', fullName: 'Microsoft Corp', quantity: 12, averagePrice: 360.00, currentPrice: 415.20, ppl: 662.40, fxPpl: 0, initialFillDate: '2024-01-20T10:00:00Z' },
-  { ticker: 'AMZN', fullName: 'Amazon.com Inc', quantity: 7, averagePrice: 175.00, currentPrice: 188.30, ppl: 93.10, fxPpl: 0, initialFillDate: '2024-03-05T10:00:00Z' },
-  { ticker: 'GOOGL', fullName: 'Alphabet Inc', quantity: 15, averagePrice: 140.00, currentPrice: 152.80, ppl: 192.00, fxPpl: 0, initialFillDate: '2024-02-14T10:00:00Z' },
-  { ticker: 'META', fullName: 'Meta Platforms', quantity: 6, averagePrice: 380.00, currentPrice: 505.40, ppl: 752.40, fxPpl: 0, initialFillDate: '2024-01-08T10:00:00Z' },
-  { ticker: 'PLTR', fullName: 'Palantir Technologies', quantity: 50, averagePrice: 18.00, currentPrice: 28.50, ppl: 525.00, fxPpl: 0, initialFillDate: '2024-04-01T10:00:00Z' },
-];
-
-const MOCK_CASH = { free: 1250.42, invested: 42380.00, result: 5338.40, total: 43630.42, blocked: 0, pieCash: 0 };
-const MOCK_INFO = { id: 'demo-account', currencyCode: 'GBP', type: 'ISA', tradingType: 'EQUITY' };
-
 function headers() {
-  return { Authorization: process.env.T212_API_KEY || '' };
+  return { Authorization: process.env.T212_API_KEY || '', 'Content-Type': 'application/json' };
 }
 
-async function cached(key, ttl, fn) {
-  try {
-    const cached = await redis.get(key);
-    if (cached) return JSON.parse(cached);
-  } catch {}
-  const data = await fn();
+function hasKey() {
+  return !!process.env.T212_API_KEY;
+}
+
+async function fromRedis(key) {
+  try { const v = await redis.get(key); return v ? JSON.parse(v) : null; } catch { return null; }
+}
+
+async function toRedis(key, ttl, data) {
   try { await redis.setEx(key, ttl, JSON.stringify(data)); } catch {}
-  return data;
+}
+
+async function fromDB(table, orderBy = 'updated_at DESC') {
+  try {
+    const r = await query(`SELECT raw_data, updated_at FROM ${table} ORDER BY ${orderBy} LIMIT 1`);
+    if (r.rows.length) return { data: r.rows[0].raw_data, age: r.rows[0].updated_at };
+  } catch {}
+  return null;
+}
+
+async function savePortfolioDB(positions) {
+  for (const p of positions) {
+    const val = (p.currentPrice || 0) * (p.quantity || 0);
+    const pnlPct = p.averagePrice > 0 ? ((p.currentPrice - p.averagePrice) / p.averagePrice) * 100 : 0;
+    await query(
+      `INSERT INTO positions (ticker, quantity, avg_price, current_price, pnl, pnl_pct, market_value, raw_data, updated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW())
+       ON CONFLICT (ticker) DO UPDATE SET
+         quantity=$2, avg_price=$3, current_price=$4, pnl=$5, pnl_pct=$6,
+         market_value=$7, raw_data=$8, updated_at=NOW()`,
+      [p.ticker, p.quantity, p.averagePrice, p.currentPrice, p.ppl, pnlPct, val, JSON.stringify(p)]
+    ).catch(() => {});
+  }
+}
+
+async function saveCashDB(cash) {
+  await query(
+    `INSERT INTO account_cache (key, raw_data, updated_at) VALUES ('cash', $1, NOW())
+     ON CONFLICT (key) DO UPDATE SET raw_data=$1, updated_at=NOW()`,
+    [JSON.stringify(cash)]
+  ).catch(() => {});
+}
+
+async function getPortfolioFromDB() {
+  try {
+    const r = await query('SELECT raw_data, updated_at FROM positions ORDER BY market_value DESC');
+    if (r.rows.length) return { positions: r.rows.map(r => r.raw_data), age: r.rows[0].updated_at };
+  } catch {}
+  return null;
+}
+
+async function getCashFromDB() {
+  try {
+    const r = await query("SELECT raw_data, updated_at FROM account_cache WHERE key='cash'");
+    if (r.rows.length) return { cash: r.rows[0].raw_data, age: r.rows[0].updated_at };
+  } catch {}
+  return null;
 }
 
 async function getPortfolio() {
-  return cached('t212:portfolio', 30, async () => {
-    if (!process.env.T212_API_KEY) return MOCK_PORTFOLIO;
-    try {
-      const { data } = await axios.get(`${BASE}/equity/portfolio`, { headers: headers() });
-      return data;
-    } catch { return MOCK_PORTFOLIO; }
-  });
+  const redisData = await fromRedis('t212:portfolio');
+  if (redisData) return { data: redisData, source: 'redis' };
+
+  if (!hasKey()) {
+    const db = await getPortfolioFromDB();
+    if (db) return { data: db.positions, source: 'db', age: db.age };
+    return { data: [], source: 'no_key' };
+  }
+
+  try {
+    const { data } = await axios.get(`${BASE}/equity/portfolio`, { headers: headers(), timeout: 10000 });
+    const positions = Array.isArray(data) ? data : (data.items || data.positions || []);
+    await toRedis('t212:portfolio', 30, positions);
+    await savePortfolioDB(positions);
+    return { data: positions, source: 'live' };
+  } catch (e) {
+    const db = await getPortfolioFromDB();
+    if (db) return { data: db.positions, source: 'db', age: db.age };
+    return { data: [], source: 'error', error: e.message };
+  }
 }
 
 async function getCash() {
-  return cached('t212:cash', 60, async () => {
-    if (!process.env.T212_API_KEY) return MOCK_CASH;
-    try {
-      const { data } = await axios.get(`${BASE}/equity/account/cash`, { headers: headers() });
-      return data;
-    } catch { return MOCK_CASH; }
-  });
+  const redisData = await fromRedis('t212:cash');
+  if (redisData) return { data: redisData, source: 'redis' };
+
+  if (!hasKey()) {
+    const db = await getCashFromDB();
+    if (db) return { data: db.cash, source: 'db', age: db.age };
+    return { data: {}, source: 'no_key' };
+  }
+
+  try {
+    const { data } = await axios.get(`${BASE}/equity/account/cash`, { headers: headers(), timeout: 10000 });
+    await toRedis('t212:cash', 60, data);
+    await saveCashDB(data);
+    return { data, source: 'live' };
+  } catch (e) {
+    const db = await getCashFromDB();
+    if (db) return { data: db.cash, source: 'db', age: db.age };
+    return { data: {}, source: 'error', error: e.message };
+  }
 }
 
 async function getAccountInfo() {
-  return cached('t212:info', 300, async () => {
-    if (!process.env.T212_API_KEY) return MOCK_INFO;
-    try {
-      const { data } = await axios.get(`${BASE}/equity/account/info`, { headers: headers() });
-      return data;
-    } catch { return MOCK_INFO; }
-  });
+  const cached = await fromRedis('t212:info');
+  if (cached) return { data: cached, source: 'redis' };
+  if (!hasKey()) return { data: { currencyCode: 'GBP', type: 'ISA' }, source: 'no_key' };
+  try {
+    const { data } = await axios.get(`${BASE}/equity/account/info`, { headers: headers(), timeout: 10000 });
+    await toRedis('t212:info', 300, data);
+    return { data, source: 'live' };
+  } catch { return { data: { currencyCode: 'GBP', type: 'ISA' }, source: 'error' }; }
 }
 
 async function getOrders() {
-  return cached('t212:orders', 300, async () => {
-    if (!process.env.T212_API_KEY) return [];
-    try {
-      const { data } = await axios.get(`${BASE}/history/orders?limit=50`, { headers: headers() });
-      return data.items || data || [];
-    } catch { return []; }
-  });
+  const cached = await fromRedis('t212:orders');
+  if (cached) return cached;
+  if (!hasKey()) return [];
+  try {
+    const { data } = await axios.get(`${BASE}/history/orders?limit=50`, { headers: headers(), timeout: 10000 });
+    const orders = data.items || data || [];
+    await toRedis('t212:orders', 300, orders);
+    return orders;
+  } catch { return []; }
 }
 
 async function getDividends() {
-  return cached('t212:dividends', 300, async () => {
-    if (!process.env.T212_API_KEY) return [];
-    try {
-      const { data } = await axios.get(`${BASE}/history/dividends?limit=50`, { headers: headers() });
-      return data.items || data || [];
-    } catch { return []; }
-  });
+  const cached = await fromRedis('t212:dividends');
+  if (cached) return cached;
+  if (!hasKey()) return [];
+  try {
+    const { data } = await axios.get(`${BASE}/history/dividends?limit=50`, { headers: headers(), timeout: 10000 });
+    const divs = data.items || data || [];
+    await toRedis('t212:dividends', 300, divs);
+    return divs;
+  } catch { return []; }
 }
 
 async function getTransactions() {
-  return cached('t212:transactions', 300, async () => {
-    if (!process.env.T212_API_KEY) return [];
-    try {
-      const { data } = await axios.get(`${BASE}/history/transactions?limit=50`, { headers: headers() });
-      return data.items || data || [];
-    } catch { return []; }
-  });
+  const cached = await fromRedis('t212:transactions');
+  if (cached) return cached;
+  if (!hasKey()) return [];
+  try {
+    const { data } = await axios.get(`${BASE}/history/transactions?limit=50`, { headers: headers(), timeout: 10000 });
+    const txns = data.items || data || [];
+    await toRedis('t212:transactions', 300, txns);
+    return txns;
+  } catch { return []; }
 }
 
 async function getPies() {
-  return cached('t212:pies', 300, async () => {
-    if (!process.env.T212_API_KEY) return [];
-    try {
-      const { data } = await axios.get(`${BASE}/equity/pies`, { headers: headers() });
-      return data || [];
-    } catch { return []; }
-  });
-}
-
-async function getInstrument(ticker) {
-  return cached(`t212:instrument:${ticker}`, 3600, async () => {
-    if (!process.env.T212_API_KEY) return null;
-    try {
-      const { data } = await axios.get(`${BASE}/instruments/metadata/ticker/${ticker}`, { headers: headers() });
-      return data;
-    } catch { return null; }
-  });
+  const cached = await fromRedis('t212:pies');
+  if (cached) return cached;
+  if (!hasKey()) return [];
+  try {
+    const { data } = await axios.get(`${BASE}/equity/pies`, { headers: headers(), timeout: 10000 });
+    const pies = Array.isArray(data) ? data : [];
+    await toRedis('t212:pies', 300, pies);
+    return pies;
+  } catch { return []; }
 }
 
 function calcMetrics(portfolio, cash) {
-  const totalValue = portfolio.reduce((s, p) => s + (p.currentPrice * p.quantity), 0) + (cash.free || 0);
-  const totalPnl = portfolio.reduce((s, p) => s + (p.ppl || 0), 0);
-  const totalCost = portfolio.reduce((s, p) => s + (p.averagePrice * p.quantity), 0);
+  const cashData = cash?.data || cash || {};
+  const positions = Array.isArray(portfolio) ? portfolio : (portfolio?.data || []);
+  const totalEquity = positions.reduce((s, p) => s + ((p.currentPrice || 0) * (p.quantity || 0)), 0);
+  const freeCash = cashData.free || cashData.cash || 0;
+  const totalValue = totalEquity + freeCash;
+  const totalPnl = positions.reduce((s, p) => s + (p.ppl || 0), 0);
+  const totalCost = positions.reduce((s, p) => s + ((p.averagePrice || 0) * (p.quantity || 0)), 0);
   const returnPct = totalCost > 0 ? (totalPnl / totalCost) * 100 : 0;
-  const sorted = [...portfolio].sort((a, b) => (b.ppl || 0) - (a.ppl || 0));
-  return { totalValue, totalPnl, totalCost, returnPct, best: sorted.slice(0, 5), worst: sorted.slice(-5).reverse() };
+  const sorted = [...positions].sort((a, b) => (b.ppl || 0) - (a.ppl || 0));
+  return { totalValue, totalEquity, freeCash, totalPnl, totalCost, returnPct, best: sorted.slice(0, 5), worst: sorted.slice(-5).reverse() };
 }
 
-module.exports = { getPortfolio, getCash, getAccountInfo, getOrders, getDividends, getTransactions, getPies, getInstrument, calcMetrics };
+module.exports = { getPortfolio, getCash, getAccountInfo, getOrders, getDividends, getTransactions, getPies, calcMetrics, hasKey };
