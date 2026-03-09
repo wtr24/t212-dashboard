@@ -1,28 +1,34 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg: #09090f;
-  --surface: #111118;
-  --surface-2: #18181f;
-  --card: #1c1c26;
-  --border: rgba(255,255,255,0.06);
-  --border-hover: rgba(255,255,255,0.12);
-  --accent: #6366f1;
-  --accent-dim: rgba(99,102,241,0.12);
-  --accent-border: rgba(99,102,241,0.3);
-  --accent-glow: rgba(99,102,241,0.2);
-  --gain: #22c55e;
-  --gain-dim: rgba(34,197,94,0.1);
-  --loss: #ef4444;
-  --loss-dim: rgba(239,68,68,0.1);
+  --bg: #f8f7f4;
+  --surface: #ffffff;
+  --surface-2: #f1f0ed;
+  --card: #ffffff;
+  --border: rgba(0,0,0,0.07);
+  --border-hover: rgba(0,0,0,0.13);
+  --accent: #0d9488;
+  --accent-dim: rgba(13,148,136,0.08);
+  --accent-border: rgba(13,148,136,0.25);
+  --accent-glow: rgba(13,148,136,0.15);
+  --secondary: #6366f1;
+  --gain: #10b981;
+  --gain-dim: rgba(16,185,129,0.1);
+  --loss: #f43f5e;
+  --loss-dim: rgba(244,63,94,0.1);
   --warning: #f59e0b;
-  --text: #f1f1f3;
-  --text-2: #a1a1aa;
-  --text-3: #52525b;
-  --radius: 14px;
-  --radius-sm: 8px;
-  --shadow: 0 4px 24px rgba(0,0,0,0.4);
-  --shadow-accent: 0 4px 24px rgba(99,102,241,0.15);
+  --warning-dim: rgba(245,158,11,0.1);
+  --text: #111827;
+  --text-2: #6b7280;
+  --text-3: #9ca3af;
+  --muted: #6b7280;
+  --danger: #f43f5e;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
+  --shadow-hover: 0 4px 12px rgba(0,0,0,0.1), 0 16px 40px rgba(0,0,0,0.08);
+  --shadow-accent: 0 4px 20px rgba(13,148,136,0.15);
+  --transition: 200ms ease;
 }
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -30,44 +36,47 @@
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: 'DM Sans', sans-serif;
   font-size: 14px;
   line-height: 1.6;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
 }
 
-body::before {
-  content: '';
-  position: fixed;
-  top: -40%;
-  left: -20%;
-  width: 600px;
-  height: 600px;
-  background: radial-gradient(circle, rgba(99,102,241,0.06) 0%, transparent 70%);
-  pointer-events: none;
-  z-index: 0;
-}
-
-#root { position: relative; z-index: 1; }
+#root { position: relative; }
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.12); border-radius: 4px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
-.mono { font-family: 'Space Mono', monospace !important; }
+.mono { font-family: 'DM Mono', monospace !important; }
 
 .card {
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: transform var(--transition), box-shadow var(--transition), border-color var(--transition);
 }
 
 .card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
   border-color: var(--border-hover);
+}
+
+.glass {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+
+.glass:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-hover);
 }
 
 .gain { color: var(--gain); }
@@ -77,12 +86,12 @@ body::before {
 .label {
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: var(--text-2);
+  color: var(--text-3);
 }
 
-button { cursor: pointer; font-family: 'Space Grotesk', sans-serif; }
+button { cursor: pointer; font-family: 'DM Sans', sans-serif; }
 a { color: var(--accent); text-decoration: none; }
 
 @keyframes shimmer {
@@ -106,7 +115,7 @@ a { color: var(--accent); text-decoration: none; }
 }
 
 .skeleton {
-  background: linear-gradient(90deg, var(--surface-2) 25%, var(--card) 50%, var(--surface-2) 75%);
+  background: linear-gradient(90deg, #eeede9 25%, #e5e4e0 50%, #eeede9 75%);
   background-size: 400px 100%;
   animation: shimmer 1.4s ease-in-out infinite;
   border-radius: var(--radius-sm);

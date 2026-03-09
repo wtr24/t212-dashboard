@@ -16,24 +16,27 @@ async function logJob(name, status, records, error) {
 async function refreshPortfolio() {
   try {
     await cache.del('t212:portfolio');
-    await cache.del('t212:cash');
-    const portfolio = await t212.getPortfolio();
-    await logJob('refresh_portfolio', 'success', portfolio.length, null);
+    await cache.del('t212:summary');
+    const result = await t212.getPortfolio();
+    const positions = result.data || [];
+    await logJob('refresh_portfolio', 'success', positions.length, null);
   } catch (e) { await logJob('refresh_portfolio', 'error', 0, e.message); }
 }
 
 async function refreshMarket() {
   try {
-    const portfolio = await t212.getPortfolio();
-    await enrichPositions(portfolio);
-    await logJob('refresh_market', 'success', portfolio.length, null);
+    const result = await t212.getPortfolio();
+    const positions = result.data || [];
+    await enrichPositions(positions);
+    await logJob('refresh_market', 'success', positions.length, null);
   } catch (e) { await logJob('refresh_market', 'error', 0, e.message); }
 }
 
 async function refreshCommunity() {
   try {
-    const portfolio = await t212.getPortfolio();
-    const tickers = portfolio.map(p => p.ticker);
+    const result = await t212.getPortfolio();
+    const positions = result.data || [];
+    const tickers = positions.map(p => p.ticker);
     await getAllSentiment(tickers);
     await logJob('refresh_community', 'success', tickers.length, null);
   } catch (e) { await logJob('refresh_community', 'error', 0, e.message); }
@@ -41,11 +44,12 @@ async function refreshCommunity() {
 
 async function refreshAnalysis() {
   try {
-    const portfolio = await t212.getPortfolio();
+    const result = await t212.getPortfolio();
+    const positions = result.data || [];
     const { enrichPositions: ep } = require('../services/marketData');
-    const enriched = await ep(portfolio);
-    await analyseTop10(portfolio, enriched);
-    await logJob('refresh_analysis', 'success', Math.min(10, portfolio.length), null);
+    const enriched = await ep(positions);
+    await analyseTop10(positions, enriched);
+    await logJob('refresh_analysis', 'success', Math.min(10, positions.length), null);
   } catch (e) { await logJob('refresh_analysis', 'error', 0, e.message); }
 }
 

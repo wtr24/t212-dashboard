@@ -1,7 +1,7 @@
 .spin { animation: spin 1s linear infinite; }
 
-.card-hover { transition: transform 0.2s, box-shadow 0.2s; }
-.card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+.card-hover { transition: transform var(--transition), box-shadow var(--transition); }
+.card-hover:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
 
-input:focus { outline: none; border-color: var(--accent) !important; }
-button:hover { opacity: 0.85; }
+input:focus { outline: none; border-color: var(--accent) !important; box-shadow: 0 0 0 3px var(--accent-dim); }
+button:active { transform: scale(0.98); }
