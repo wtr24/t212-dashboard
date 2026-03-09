@@ -42,6 +42,7 @@ function SectionLabel({ children }) {
 export default function Dashboard() {
   const { summary, positions, fearGreed } = usePortfolio();
   const s = summary.data || {};
+  const sum = s.summary || {};
   const pos = (positions.data?.positions || positions.data || []);
   const fg = fearGreed.data || {};
   const sorted = [...pos].sort((a, b) => (b.ppl || 0) - (a.ppl || 0));
@@ -57,17 +58,19 @@ export default function Dashboard() {
         {summary.loading
           ? <Skeleton width={280} height={52} style={{ marginBottom: 8 }} />
           : <div className="mono" style={{ fontSize: 52, fontWeight: 700, color: 'var(--text)', lineHeight: 1, marginBottom: 8 }}>
-              £<CountUp value={s.totalValue || 0} decimals={2} duration={1400} />
+              £<CountUp value={sum.totalValue || s.totalValue || 0} decimals={2} duration={1400} />
             </div>
         }
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          {!summary.loading && s.totalPnl !== undefined && (
+          {!summary.loading && (
             <>
-              <span style={{ fontSize: 13, color: (s.totalPnl || 0) >= 0 ? 'var(--gain)' : 'var(--loss)', fontWeight: 600 }}>
-                {(s.totalPnl || 0) >= 0 ? '+' : ''}£{Math.abs(s.totalPnl || 0).toFixed(2)} all time
+              <span style={{ fontSize: 13, color: (s.unrealizedPnl || 0) >= 0 ? 'var(--gain)' : 'var(--loss)', fontWeight: 600 }}>
+                {(s.unrealizedPnl || 0) >= 0 ? '+' : ''}£{Math.abs(s.unrealizedPnl || 0).toFixed(2)} unrealised
               </span>
               <span style={{ color: 'var(--border)' }}>·</span>
-              <span style={{ fontSize: 13, color: 'var(--text-2)' }}>ISA Account · GBP</span>
+              <span style={{ fontSize: 13, color: 'var(--gain)' }}>+£{(s.realizedPnl || 0).toFixed(2)} realised</span>
+              <span style={{ color: 'var(--border)' }}>·</span>
+              <span style={{ fontSize: 13, color: 'var(--text-2)' }}>S&S ISA · GBP</span>
             </>
           )}
         </div>

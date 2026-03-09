@@ -7,25 +7,19 @@ const { analyseTop10 } = require('../services/aiAnalysis');
 
 router.get('/summary', async (req, res) => {
   try {
-    const [portfolioResult, cashResult, infoResult] = await Promise.all([
-      t212.getPortfolio(), t212.getCash(), t212.getAccountInfo()
+    const [summaryResult, portfolioResult] = await Promise.all([
+      t212.getAccountSummary(),
+      t212.getPortfolio(),
     ]);
-    const portfolio = portfolioResult.data || [];
-    const cash = cashResult.data || {};
-    const info = infoResult.data || {};
-    const metrics = t212.calcMetrics(portfolio, cash);
+    const metrics = t212.calcMetrics(portfolioResult.data, summaryResult.data);
     res.json({
       ...metrics,
-      cash,
-      info,
+      summary: summaryResult.data,
       meta: {
-        portfolioSource: portfolioResult.source,
-        cashSource: cashResult.source,
-        portfolioAge: portfolioResult.age,
-        cashAge: cashResult.age,
+        source: portfolioResult.source,
+        age: portfolioResult.age,
         hasApiKey: t212.hasKey(),
-        positionCount: portfolio.length,
-      }
+      },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -33,47 +27,33 @@ router.get('/summary', async (req, res) => {
 router.get('/positions', async (req, res) => {
   try {
     const portfolioResult = await t212.getPortfolio();
-    const portfolio = portfolioResult.data || [];
-    const enriched = await enrichPositions(portfolio);
-    const tickers = portfolio.map(p => p.ticker);
+    const positions = portfolioResult.data || [];
+    const enriched = await enrichPositions(positions);
+    const tickers = positions.map(p => p.ticker);
     const [sentiment, analysis] = await Promise.all([
       getAllSentiment(tickers),
-      analyseTop10(portfolio, enriched),
+      analyseTop10(positions, enriched),
     ]);
-    const positions = enriched.map(pos => ({
-      ...pos,
-      sentiment: sentiment.find(s => s.ticker === pos.ticker),
-      analysis: analysis.find(a => a.ticker === pos.ticker),
-    }));
-    res.json({ positions, source: portfolioResult.source, age: portfolioResult.age });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/best', async (req, res) => {
-  try {
-    const { data: portfolio } = await t212.getPortfolio();
-    const { best } = t212.calcMetrics(portfolio, {});
-    res.json(best);
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/worst', async (req, res) => {
-  try {
-    const { data: portfolio } = await t212.getPortfolio();
-    const { worst } = t212.calcMetrics(portfolio, {});
-    res.json(worst);
+    res.json({
+      positions: enriched.map(pos => ({
+        ...pos,
+        sentiment: sentiment.find(s => s.ticker === pos.ticker),
+        analysis: analysis.find(a => a.ticker === pos.ticker),
+      })),
+      source: portfolioResult.source,
+      age: portfolioResult.age,
+    });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.get('/allocation', async (req, res) => {
   try {
-    const { data: portfolio } = await t212.getPortfolio();
-    const enriched = await enrichPositions(portfolio);
-    const total = enriched.reduce((s, p) => s + ((p.currentPrice || 0) * (p.quantity || 0)), 0);
-    const byStock = enriched.map(p => ({
-      ticker: p.ticker, name: p.fullName,
-      value: (p.currentPrice || 0) * (p.quantity || 0),
-      pct: total > 0 ? (((p.currentPrice || 0) * (p.quantity || 0)) / total) * 100 : 0,
+    const { data: positions } = await t212.getPortfolio();
+    const total = positions.reduce((s, p) => s + (p.currentPrice * p.quantity), 0);
+    const byStock = positions.map(p => ({
+      ticker: p.ticker,
+      value: p.currentPrice * p.quantity,
+      pct: total > 0 ? ((p.currentPrice * p.quantity) / total) * 100 : 0,
     })).sort((a, b) => b.value - a.value);
     res.json({ byStock, total });
   } catch (e) { res.status(500).json({ error: e.message }); }
@@ -87,27 +67,15 @@ router.get('/history', async (req, res) => {
 router.get('/dividends', async (req, res) => {
   try {
     const dividends = await t212.getDividends();
-    const total = dividends.reduce((s, d) => s + (d.amount || d.grossAmount || 0), 0);
-    res.json({ dividends, totalReceived: total });
+    res.json({ dividends, totalReceived: dividends.reduce((s, d) => s + (d.amount || 0), 0) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.get('/transactions', async (req, res) => {
   try {
     const transactions = await t212.getTransactions();
-    const netDeposits = transactions.filter(t => (t.type || '').toLowerCase().includes('deposit'))
-      .reduce((s, t) => s + (t.amount || 0), 0);
+    const netDeposits = transactions.filter(t => t.type === 'DEPOSIT').reduce((s, t) => s + (t.amount || 0), 0);
     res.json({ transactions, netDeposits });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/', async (req, res) => {
-  try {
-    const [portfolioResult, cashResult, infoResult] = await Promise.all([
-      t212.getPortfolio(), t212.getCash(), t212.getAccountInfo()
-    ]);
-    const metrics = t212.calcMetrics(portfolioResult.data || [], cashResult.data || {});
-    res.json({ portfolio: portfolioResult.data, cash: cashResult.data, info: infoResult.data, metrics });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
