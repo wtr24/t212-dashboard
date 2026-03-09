@@ -27,7 +27,7 @@ services:
       retries: 3
 
   api:
-    image: wtr24/t212-api:latest
+    image: ${DOCKER_USERNAME}/t212-api:latest
     ports:
       - "5002:5002"
     env_file: .env
@@ -52,7 +52,7 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
 
   client:
-    image: wtr24/t212-client:latest
+    image: ${DOCKER_USERNAME}/t212-client:latest
     ports:
       - "3002:80"
     depends_on:

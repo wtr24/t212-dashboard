@@ -1,117 +1,32 @@
-name: Build, Push & Deploy
+name: Build and Push to Docker Hub
 
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
-  test:
+  build-and-push:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: server/package-lock.json
-
-      - name: Test server
-        run: |
-          cd server && npm ci
-          npm test --if-present || true
-
-      - name: Build client
-        run: |
-          cd client && npm ci
-          npm run build
-
-  build-push:
-    needs: test
-    runs-on: ubuntu-latest
-    outputs:
-      sha_tag: ${{ steps.meta.outputs.sha_tag }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: docker/setup-buildx-action@v3
-
-      - uses: docker/login-action@v3
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Set tags
-        id: meta
-        run: echo "sha_tag=sha-${{ github.sha }}" >> $GITHUB_OUTPUT
 
       - name: Build and push API
         uses: docker/build-push-action@v5
         with:
           context: ./server
           push: true
-          tags: |
-            wtr24/t212-api:latest
-            wtr24/t212-api:${{ steps.meta.outputs.sha_tag }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ${{ secrets.DOCKER_USERNAME }}/t212-api:latest
 
       - name: Build and push client
         uses: docker/build-push-action@v5
         with:
           context: ./client
           push: true
-          tags: |
-            wtr24/t212-client:latest
-            wtr24/t212-client:${{ steps.meta.outputs.sha_tag }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-  deploy:
-    needs: build-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to NAS via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.NAS_HOST }}
-          username: ${{ secrets.NAS_SSH_USER }}
-          key: ${{ secrets.NAS_SSH_KEY }}
-          port: 22
-          script: |
-            cd /volume1/docker/t212-dashboard
-            docker compose pull
-            docker compose up -d --remove-orphans
-            docker compose ps
-
-      - name: Verify deploy
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.NAS_HOST }}
-          username: ${{ secrets.NAS_SSH_USER }}
-          key: ${{ secrets.NAS_SSH_KEY }}
-          port: 22
-          script: |
-            sleep 15
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5002/api/health)
-            if [ "$STATUS" != "200" ]; then
-              echo "Health check failed: $STATUS"
-              cd /volume1/docker/t212-dashboard
-              bash rollback.sh ${{ needs.build-push.outputs.sha_tag }} || true
-              exit 1
-            fi
-            echo "Deploy verified: $STATUS"
-
-      - name: Notify Discord (success)
-        if: success()
-        run: |
-          curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"content\": \"✅ **T212 Dashboard deployed** — \`${{ github.sha }}\` by ${{ github.actor }}\"}"
-
-      - name: Notify Discord (failure)
-        if: failure()
-        run: |
-          curl -s -X POST "${{ secrets.DISCORD_WEBHOOK }}" \
-            -H "Content-Type: application/json" \
-            -d "{\"content\": \"❌ **T212 Dashboard deploy FAILED** — \`${{ github.sha }}\` — auto-rolling back\"}"
+          tags: ${{ secrets.DOCKER_USERNAME }}/t212-client:latest
