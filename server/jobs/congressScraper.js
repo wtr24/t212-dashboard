@@ -1,3 +1,4 @@
+const quiver = require('../scrapers/congressQuiver');
 const house = require('../scrapers/congressHouseEFTS');
 const senate = require('../scrapers/congressSenateEFTS');
 const { seedIfEmpty } = require('../scrapers/congressSeed');
@@ -5,22 +6,28 @@ const { invalidateCache } = require('../services/congressService');
 const cache = require('../services/cache');
 
 async function runAllScrapers() {
-  const results = { house: null, senate: null, seeded: 0 };
+  const results = { quiver: null, house: null, senate: null, seeded: 0 };
 
   try {
-    results.house = await house.run();
-    console.log(`[congress] House EFTS: found=${results.house.found} inserted=${results.house.inserted}`);
+    results.quiver = await quiver.run();
+    console.log(`[congress] Quiverquant: found=${results.quiver.found} inserted=${results.quiver.inserted} updated=${results.quiver.updated}`);
   } catch (e) {
-    console.error('[congress] House EFTS failed:', e.message);
-    results.house = { error: e.message };
-  }
+    console.error('[congress] Quiverquant failed:', e.message);
+    results.quiver = { error: e.message };
 
-  try {
-    results.senate = await senate.run();
-    console.log(`[congress] Senate EFTS: found=${results.senate.found} inserted=${results.senate.inserted}`);
-  } catch (e) {
-    console.error('[congress] Senate EFTS failed:', e.message);
-    results.senate = { error: e.message };
+    try {
+      results.house = await house.run();
+      console.log(`[congress] House EFTS fallback: found=${results.house.found}`);
+    } catch (e2) {
+      results.house = { error: e2.message };
+    }
+
+    try {
+      results.senate = await senate.run();
+      console.log(`[congress] Senate EFTS fallback: found=${results.senate.found}`);
+    } catch (e3) {
+      results.senate = { error: e3.message };
+    }
   }
 
   const { seeded } = await seedIfEmpty().catch(() => ({ seeded: 0 }));
@@ -30,14 +37,24 @@ async function runAllScrapers() {
   }
 
   await invalidateCache().catch(() => {});
-  await cache.set('congress:last_run', Date.now().toString(), 3600);
+  await cache.set('congress:last_run', Date.now().toString(), 86400);
+  await cache.del('congress:scraping');
   return results;
 }
 
 async function scheduleIfDue() {
+  const isRunning = await cache.get('congress:scraping').catch(() => null);
+  if (isRunning) return { status: 'already_running' };
   const lastRun = await cache.get('congress:last_run').catch(() => null);
-  if (lastRun && Date.now() - parseInt(lastRun) < 5 * 60 * 1000) return;
+  if (lastRun && Date.now() - parseInt(lastRun) < 5 * 60 * 1000) return { status: 'skipped' };
+  return triggerScrape();
+}
+
+async function triggerScrape() {
+  const isRunning = await cache.get('congress:scraping').catch(() => null);
+  if (isRunning) return { status: 'already_running' };
+  await cache.set('congress:scraping', '1', 120);
   return runAllScrapers();
 }
 
-module.exports = { runAllScrapers, scheduleIfDue };
+module.exports = { runAllScrapers, scheduleIfDue, triggerScrape };
