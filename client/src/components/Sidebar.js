@@ -1,11 +1,12 @@
 import { motion } from 'framer-motion';
-import { LayoutDashboard, TrendingUp, BarChart3, Cpu, History, Coins, Settings } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, BarChart3, Cpu, History, Coins, Settings, Building2 } from 'lucide-react';
 
 const nav = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'positions', label: 'Positions', icon: TrendingUp },
   { id: 'charts', label: 'Charts', icon: BarChart3 },
   { id: 'predictions', label: 'AI Signals', icon: Cpu },
+  { id: 'congress', label: 'Congress', icon: Building2 },
   { id: 'history', label: 'History', icon: History },
   { id: 'dividends', label: 'Dividends', icon: Coins },
   { id: 'settings', label: 'Settings', icon: Settings },

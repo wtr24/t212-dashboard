@@ -31,11 +31,17 @@ app.use('/api/community', require('./routes/community'));
 app.use('/api/analysis', require('./routes/analysis'));
 app.use('/api/market', require('./routes/market'));
 app.use('/api/refresh', require('./routes/refresh'));
+app.use('/api/congress', require('./routes/congress'));
 
 const PORT = process.env.PORT || 5002;
 
-initDB().then(() => {
+const { startJobs } = require('./jobs/refresh');
+
+initDB().then(async () => {
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  startJobs();
+  const { runAllScrapers } = require('./jobs/congressScraper');
+  runAllScrapers().catch(e => console.error('[congress] Initial scrape failed:', e.message));
 }).catch(err => {
   console.error('DB init failed:', err.message);
   app.listen(PORT, () => console.log(`Server running on port ${PORT} (no DB)`));

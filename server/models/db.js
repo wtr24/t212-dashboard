@@ -103,6 +103,48 @@ async function initDB() {
       error_message TEXT,
       ran_at TIMESTAMP DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS congress_trades (
+      id SERIAL PRIMARY KEY,
+      member_name VARCHAR(200) NOT NULL,
+      chamber VARCHAR(10),
+      party VARCHAR(1),
+      state VARCHAR(2),
+      ticker VARCHAR(20),
+      asset_name VARCHAR(500),
+      asset_type VARCHAR(50),
+      transaction_type VARCHAR(20),
+      amount_range VARCHAR(50),
+      amount_min BIGINT,
+      amount_max BIGINT,
+      transaction_date DATE,
+      disclosure_date DATE,
+      source VARCHAR(50),
+      source_url TEXT,
+      raw_data JSONB,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(member_name, ticker, transaction_date, transaction_type, amount_range)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_congress_member ON congress_trades(member_name);
+    CREATE INDEX IF NOT EXISTS idx_congress_ticker ON congress_trades(ticker);
+    CREATE INDEX IF NOT EXISTS idx_congress_date ON congress_trades(transaction_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_congress_type ON congress_trades(transaction_type);
+    CREATE INDEX IF NOT EXISTS idx_congress_party ON congress_trades(party);
+    CREATE INDEX IF NOT EXISTS idx_congress_chamber ON congress_trades(chamber);
+
+    CREATE TABLE IF NOT EXISTS scraper_runs (
+      id SERIAL PRIMARY KEY,
+      source VARCHAR(50),
+      started_at TIMESTAMP DEFAULT NOW(),
+      completed_at TIMESTAMP,
+      records_found INTEGER DEFAULT 0,
+      records_inserted INTEGER DEFAULT 0,
+      records_updated INTEGER DEFAULT 0,
+      error TEXT,
+      duration_ms INTEGER
+    );
   `);
 }
 

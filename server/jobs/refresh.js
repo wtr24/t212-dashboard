@@ -62,6 +62,10 @@ function startJobs() {
     await cache.del('t212:transactions');
     await t212.getTransactions();
   });
+  cron.schedule('*/5 * * * *', async () => {
+    const { scheduleIfDue } = require('./congressScraper');
+    await scheduleIfDue().catch(e => console.error('[congress cron]', e.message));
+  });
   console.log('Refresh jobs started');
 }
 

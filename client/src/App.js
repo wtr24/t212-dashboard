@@ -9,8 +9,9 @@ import Predictions from './pages/Predictions';
 import History from './pages/History';
 import Dividends from './pages/Dividends';
 import Settings from './pages/Settings';
+import CongressTracker from './pages/CongressTracker';
 
-const pages = { dashboard: Dashboard, positions: Positions, charts: Charts, predictions: Predictions, history: History, dividends: Dividends, settings: Settings };
+const pages = { dashboard: Dashboard, positions: Positions, charts: Charts, predictions: Predictions, congress: CongressTracker, history: History, dividends: Dividends, settings: Settings };
 
 export default function App() {
   const [page, setPage] = useState('dashboard');
