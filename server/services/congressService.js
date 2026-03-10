@@ -40,7 +40,7 @@ async function getRecentTrades(filters = {}) {
     limit,
     pages: Math.ceil(parseInt(countRes.rows[0].count) / limit),
   };
-  await cache.set(cacheKey, JSON.stringify(result), CACHE_TTL);
+  await cache.setEx(cacheKey, JSON.stringify(result), CACHE_TTL);
   return result;
 }
 
@@ -68,7 +68,7 @@ async function getStats() {
     mostTradedTicker: activeTicker.rows[0]?.ticker || null,
     lastScraperRun: lastRun.rows[0] || null,
   };
-  await cache.set('congress:stats', JSON.stringify(result), CACHE_TTL);
+  await cache.setEx('congress:stats', JSON.stringify(result), CACHE_TTL);
   return result;
 }
 
@@ -76,7 +76,7 @@ async function getMembers() {
   const cached = await cache.get('congress:members');
   if (cached) return JSON.parse(cached);
   const res = await query('SELECT DISTINCT member_name, party, chamber, state FROM congress_trades ORDER BY member_name');
-  await cache.set('congress:members', JSON.stringify(res.rows), 300);
+  await cache.setEx('congress:members', JSON.stringify(res.rows), 300);
   return res.rows;
 }
 
@@ -84,7 +84,7 @@ async function getTickers() {
   const cached = await cache.get('congress:tickers');
   if (cached) return JSON.parse(cached);
   const res = await query(`SELECT DISTINCT ticker, asset_name FROM congress_trades WHERE ticker IS NOT NULL ORDER BY ticker`);
-  await cache.set('congress:tickers', JSON.stringify(res.rows), 300);
+  await cache.setEx('congress:tickers', JSON.stringify(res.rows), 300);
   return res.rows;
 }
 

@@ -37,7 +37,7 @@ async function runAllScrapers() {
   }
 
   await invalidateCache().catch(() => {});
-  await cache.set('congress:last_run', Date.now().toString(), 86400);
+  await cache.setEx('congress:last_run', 86400, Date.now().toString());
   await cache.del('congress:scraping');
   return results;
 }
@@ -53,7 +53,7 @@ async function scheduleIfDue() {
 async function triggerScrape() {
   const isRunning = await cache.get('congress:scraping').catch(() => null);
   if (isRunning) return { status: 'already_running' };
-  await cache.set('congress:scraping', '1', 120);
+  await cache.setEx('congress:scraping', 120, '1');
   return runAllScrapers();
 }
 
