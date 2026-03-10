@@ -133,6 +133,57 @@ async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_congress_type ON congress_trades(transaction_type);
     CREATE INDEX IF NOT EXISTS idx_congress_party ON congress_trades(party);
     CREATE INDEX IF NOT EXISTS idx_congress_chamber ON congress_trades(chamber);
+
+    CREATE TABLE IF NOT EXISTS insider_trades (
+      id SERIAL PRIMARY KEY,
+      ticker VARCHAR(20) NOT NULL,
+      company_name VARCHAR(500),
+      insider_name VARCHAR(200) NOT NULL,
+      title VARCHAR(100),
+      trade_type VARCHAR(50),
+      price DECIMAL,
+      qty BIGINT,
+      owned_after BIGINT,
+      delta_own_pct DECIMAL,
+      value DECIMAL,
+      trade_date DATE,
+      filing_date DATE,
+      source VARCHAR(50),
+      raw_data JSONB,
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(ticker, insider_name, trade_date, trade_type, qty)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_insider_ticker ON insider_trades(ticker);
+    CREATE INDEX IF NOT EXISTS idx_insider_name ON insider_trades(insider_name);
+    CREATE INDEX IF NOT EXISTS idx_insider_date ON insider_trades(trade_date DESC);
+    CREATE INDEX IF NOT EXISTS idx_insider_type ON insider_trades(trade_type);
+    CREATE INDEX IF NOT EXISTS idx_insider_value ON insider_trades(value DESC);
+  `);
+
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'insider_trades_unique_key'
+      ) THEN
+        ALTER TABLE insider_trades
+          ADD CONSTRAINT insider_trades_unique_key
+          UNIQUE (ticker, insider_name, trade_date, trade_type, qty);
+      END IF;
+    END $$;
+
+    CREATE TABLE IF NOT EXISTS insider_scraper_runs (
+      id SERIAL PRIMARY KEY,
+      source VARCHAR(50),
+      started_at TIMESTAMP DEFAULT NOW(),
+      completed_at TIMESTAMP,
+      records_found INTEGER DEFAULT 0,
+      records_inserted INTEGER DEFAULT 0,
+      records_updated INTEGER DEFAULT 0,
+      error TEXT,
+      duration_ms INTEGER
+    );
   `);
 
   await pool.query(`

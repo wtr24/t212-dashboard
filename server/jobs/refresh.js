@@ -66,6 +66,10 @@ function startJobs() {
     const { scheduleIfDue } = require('./congressScraper');
     await scheduleIfDue().catch(e => console.error('[congress cron]', e.message));
   });
+  cron.schedule('*/5 * * * *', async () => {
+    const { scheduleIfDue: insiderDue } = require('./insiderScraper');
+    await insiderDue().catch(e => console.error('[insider cron]', e.message));
+  });
   console.log('Refresh jobs started');
 }
 

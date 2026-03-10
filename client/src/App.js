@@ -10,8 +10,9 @@ import History from './pages/History';
 import Dividends from './pages/Dividends';
 import Settings from './pages/Settings';
 import CongressTracker from './pages/CongressTracker';
+import InsiderTracker from './pages/InsiderTracker';
 
-const pages = { dashboard: Dashboard, positions: Positions, charts: Charts, predictions: Predictions, congress: CongressTracker, history: History, dividends: Dividends, settings: Settings };
+const pages = { dashboard: Dashboard, positions: Positions, charts: Charts, predictions: Predictions, congress: CongressTracker, insider: InsiderTracker, history: History, dividends: Dividends, settings: Settings };
 
 export default function App() {
   const [page, setPage] = useState('dashboard');
