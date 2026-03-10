@@ -151,7 +151,7 @@ const SkeletonRow = () => (
   <tr style={{ borderBottom: '1px solid var(--border)' }}>
     {[140, 50, 70, 120, 60, 80, 80, 70].map((w, i) => (
       <td key={i} style={{ padding: '12px 14px' }}>
-        <div style={{ height: 13, width: w, borderRadius: 6, background: 'var(--surface-2)', animation: 'shimmer 1.4s ease-in-out infinite', backgroundImage: 'linear-gradient(90deg, #eeede9 25%, #e5e4e0 50%, #eeede9 75%)', backgroundSize: '400px 100%' }} />
+        <div style={{ height: 13, width: w, borderRadius: 6, background: 'rgba(255,255,255,0.06)', animation: 'shimmer 1.6s ease-in-out infinite', backgroundImage: 'linear-gradient(90deg, rgba(255,255,255,0.04) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 75%)', backgroundSize: '400px 100%' }} />
       </td>
     ))}
   </tr>

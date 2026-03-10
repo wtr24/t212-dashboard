@@ -122,8 +122,16 @@ async function getOrders() {
   try {
     const { data } = await client().get('/equity/history/orders', { params: { limit: 50 } });
     const items = data.items || [];
-    await toRedis('t212:orders', 300, items);
-    return items;
+    const normalized = items.map(item => ({
+      ...item,
+      ticker: (item.ticker || '').replace(/_[A-Z]{2}_EQ$/, '').replace(/_[A-Z]+$/, ''),
+      type: item.type?.includes('BUY') ? 'BUY' : 'SELL',
+      quantity: item.filledQuantity || item.orderedQuantity || 0,
+      price: item.limitPrice || item.stopPrice || 0,
+      total: (item.filledQuantity || item.orderedQuantity || 0) * (item.limitPrice || item.stopPrice || 0),
+    }));
+    await toRedis('t212:orders', 300, normalized);
+    return normalized;
   } catch { return []; }
 }
 

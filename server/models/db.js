@@ -160,6 +160,17 @@ async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_insider_date ON insider_trades(trade_date DESC);
     CREATE INDEX IF NOT EXISTS idx_insider_type ON insider_trades(trade_type);
     CREATE INDEX IF NOT EXISTS idx_insider_value ON insider_trades(value DESC);
+
+    CREATE TABLE IF NOT EXISTS sp500_stocks (
+      id SERIAL PRIMARY KEY,
+      ticker VARCHAR(20) UNIQUE NOT NULL,
+      company VARCHAR(300),
+      sector VARCHAR(100),
+      sub_industry VARCHAR(200),
+      last_updated TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_sp500_ticker ON sp500_stocks(ticker);
+    CREATE INDEX IF NOT EXISTS idx_sp500_sector ON sp500_stocks(sector);
   `);
 
   await pool.query(`
