@@ -21,7 +21,8 @@ const SAMPLE_TRADES = [
 async function seedIfEmpty() {
   const res = await query('SELECT COUNT(*) FROM congress_trades').catch(() => ({ rows: [{ count: '0' }] }));
   const count = parseInt(res.rows[0].count);
-  if (count > 0) return { seeded: 0 };
+  if (count >= 10) return { seeded: 0 };
+  console.log(`[congress] Seeding sample trades (current count: ${count})...`);
   let seeded = 0;
   for (const t of SAMPLE_TRADES) {
     await query(
@@ -30,7 +31,7 @@ async function seedIfEmpty() {
          transaction_type, amount_range, amount_min, amount_max,
          transaction_date, disclosure_date, source, raw_data)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
-       ON CONFLICT DO NOTHING`,
+       ON CONFLICT ON CONSTRAINT congress_trades_unique_key DO NOTHING`,
       [t.member_name, t.chamber, t.party, t.state, t.ticker, t.asset_name, t.asset_type,
        t.transaction_type, t.amount_range, t.amount_min, t.amount_max,
        t.transaction_date, t.disclosure_date, 'seed', JSON.stringify(t)]

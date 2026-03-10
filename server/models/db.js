@@ -133,6 +133,18 @@ async function initDB() {
     CREATE INDEX IF NOT EXISTS idx_congress_type ON congress_trades(transaction_type);
     CREATE INDEX IF NOT EXISTS idx_congress_party ON congress_trades(party);
     CREATE INDEX IF NOT EXISTS idx_congress_chamber ON congress_trades(chamber);
+  `);
+
+  await pool.query(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'congress_trades_unique_key'
+      ) THEN
+        ALTER TABLE congress_trades
+          ADD CONSTRAINT congress_trades_unique_key
+          UNIQUE (member_name, ticker, transaction_date, transaction_type, amount_range);
+      END IF;
+    END $$;
 
     CREATE TABLE IF NOT EXISTS scraper_runs (
       id SERIAL PRIMARY KEY,

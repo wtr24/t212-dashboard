@@ -40,8 +40,11 @@ const { startJobs } = require('./jobs/refresh');
 initDB().then(async () => {
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
   startJobs();
-  const { runAllScrapers } = require('./jobs/congressScraper');
-  runAllScrapers().catch(e => console.error('[congress] Initial scrape failed:', e.message));
+  setTimeout(async () => {
+    const { runAllScrapers } = require('./jobs/congressScraper');
+    console.log('[congress] Running initial scrape...');
+    runAllScrapers().catch(e => console.error('[congress] Initial scrape failed:', e.message));
+  }, 5000);
 }).catch(err => {
   console.error('DB init failed:', err.message);
   app.listen(PORT, () => console.log(`Server running on port ${PORT} (no DB)`));
