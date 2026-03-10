@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { RefreshCw } from 'lucide-react';
 import axios from 'axios';
 
@@ -22,6 +23,19 @@ function MarketPill({ label, open }) {
 }
 
 export default function Topbar() {
+  const location = useLocation();
+  const PAGE_NAMES = {
+    '/dashboard': 'Dashboard',
+    '/positions': 'Positions',
+    '/charts': 'Charts',
+    '/predictions': 'AI Signals',
+    '/congress': 'Congress Tracker',
+    '/insider': 'Insider Trading',
+    '/history': 'Order History',
+    '/dividends': 'Dividends',
+    '/settings': 'Settings',
+  };
+  const pageName = PAGE_NAMES[location.pathname] || PAGE_NAMES[`/${location.pathname.split('/')[1]}`] || 'Dashboard';
   const [refreshing, setRefreshing] = useState(false);
   const refresh = async () => {
     setRefreshing(true);
@@ -31,7 +45,7 @@ export default function Topbar() {
 
   return (
     <div style={{ height: 56, background: 'rgba(8,13,26,0.9)', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 28px', flexShrink: 0, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}>
-      <div style={{ fontSize: 13, fontWeight: 600, background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Portfolio Analytics</div>
+      <div style={{ fontSize: 13, fontWeight: 600, background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{pageName}</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <MarketPill label="NYSE" open={true} />
         <MarketPill label="LSE" open={false} />
