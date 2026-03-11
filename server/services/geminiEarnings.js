@@ -2,42 +2,85 @@ const https = require('https');
 const { query } = require('../models/db');
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const FREE_RPD = parseInt(process.env.GEMINI_RPD || '20');
+const RPM_DELAY_MS = parseInt(process.env.GEMINI_DELAY_MS || '15000'); // 15s = safe for 5 RPM
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ── Quota tracking (DB-persisted, survives restarts) ──────────────────────────
+
+async function getRemainingQuota() {
+  const r = await query(
+    `SELECT requests_today FROM gemini_usage WHERE model=$1 AND date=CURRENT_DATE`,
+    [GEMINI_MODEL]
+  ).catch(() => ({ rows: [] }));
+  const used = r.rows[0]?.requests_today || 0;
+  return Math.max(0, FREE_RPD - used);
+}
+
+async function getUsedToday() {
+  const r = await query(
+    `SELECT requests_today FROM gemini_usage WHERE model=$1 AND date=CURRENT_DATE`,
+    [GEMINI_MODEL]
+  ).catch(() => ({ rows: [] }));
+  return r.rows[0]?.requests_today || 0;
+}
+
+async function recordUsage() {
+  await query(
+    `INSERT INTO gemini_usage (model, date, requests_today, last_request_at)
+     VALUES ($1, CURRENT_DATE, 1, NOW())
+     ON CONFLICT (model, date) DO UPDATE
+     SET requests_today = gemini_usage.requests_today + 1, last_request_at = NOW()`,
+    [GEMINI_MODEL]
+  ).catch(() => {});
+}
+
+async function markExhausted() {
+  await query(
+    `INSERT INTO gemini_usage (model, date, requests_today, last_request_at)
+     VALUES ($1, CURRENT_DATE, $2, NOW())
+     ON CONFLICT (model, date) DO UPDATE
+     SET requests_today = $2, last_request_at = NOW()`,
+    [GEMINI_MODEL, FREE_RPD]
+  ).catch(() => {});
+}
+
+// ── HTTP call ─────────────────────────────────────────────────────────────────
 
 function callGeminiOnce(prompt, apiKey) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: 1000 },
+      generationConfig: { temperature: 0.3, maxOutputTokens: 600 },
     });
-    const options = {
+    const req = https.request({
       hostname: 'generativelanguage.googleapis.com',
       path: `/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-    };
-    const req = https.request(options, res => {
+    }, res => {
       let data = '';
       res.on('data', d => { data += d; });
       res.on('end', () => {
         if (res.statusCode === 429) {
-          reject(Object.assign(new Error(`Gemini 429 rate limit`), { code: 429 }));
+          reject(Object.assign(new Error('Gemini 429: quota/rate limit'), { code: 429 }));
           return;
         }
         if (res.statusCode !== 200) {
-          reject(new Error(`Gemini ${res.statusCode}: ${data.slice(0, 300)}`));
+          reject(new Error(`Gemini ${res.statusCode}: ${data.slice(0, 200)}`));
           return;
         }
         try {
           const parsed = JSON.parse(data);
-          // 2.5-flash is a thinking model — skip thought parts, get text
+          // 2.5-flash is a thinking model — parts[0] may be thought, find actual text
           const parts = parsed.candidates?.[0]?.content?.parts || [];
           const text = parts.find(p => p.text && !p.thought)?.text
             || parts.filter(p => p.text).map(p => p.text).join('').trim();
-          resolve(text);
+          if (!text) reject(new Error('Empty response from Gemini'));
+          else resolve(text);
         } catch (e) {
-          reject(new Error(`Parse failed: ${data.slice(0, 100)}`));
+          reject(new Error(`Parse failed: ${data.slice(0, 80)}`));
         }
       });
     });
@@ -50,111 +93,92 @@ function callGeminiOnce(prompt, apiKey) {
 
 async function callGemini(prompt, apiKey) {
   try {
-    return await callGeminiOnce(prompt, apiKey);
+    const text = await callGeminiOnce(prompt, apiKey);
+    await recordUsage();
+    return text;
   } catch (e) {
     if (e.code === 429) {
-      console.log('[gemini] Rate limited, waiting 30s...');
-      await sleep(30000);
-      return callGeminiOnce(prompt, apiKey);
+      console.log('[gemini] 429 hit, marking quota exhausted for today');
+      await markExhausted();
+      throw e;
     }
     throw e;
   }
 }
 
+// ── Yahoo Finance news context (pre-fetched, not Gemini browsing) ─────────────
+
 function fetchYahooContext(ticker) {
   return new Promise(resolve => {
-    const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36';
-
-    const newsReq = https.get(
-      `https://query1.finance.yahoo.com/v8/finance/search?q=${ticker}&newsCount=10&quotesCount=0`,
-      { headers: { 'User-Agent': UA, Accept: 'application/json' }, timeout: 8000 },
+    const req = https.get(
+      `https://query1.finance.yahoo.com/v8/finance/search?q=${encodeURIComponent(ticker)}&newsCount=8&quotesCount=0`,
+      { headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' }, timeout: 8000 },
       res => {
         let d = '';
         res.on('data', c => { d += c; });
         res.on('end', () => {
           try {
             const json = JSON.parse(d);
-            const news = (json?.news || []).slice(0, 10).map(n => ({ headline: n.title, source: n.publisher }));
-            resolve({ recentHeadlines: news, analystUpgrades: [], momentum30d: 0, analystTrendText: 'STABLE', strongBuys: 0, buys: 0, holds: 0, sells: 0, analystCount: 0 });
-          } catch { resolve(defaultCtx()); }
+            const headlines = (json?.news || []).slice(0, 5).map(n => n.title).filter(Boolean);
+            resolve(headlines);
+          } catch { resolve([]); }
         });
       }
     );
-    newsReq.on('error', () => resolve(defaultCtx()));
-    newsReq.on('timeout', () => { newsReq.destroy(); resolve(defaultCtx()); });
+    req.on('error', () => resolve([]));
+    req.on('timeout', () => { req.destroy(); resolve([]); });
   });
 }
 
-function defaultCtx() {
-  return { recentHeadlines: [], analystUpgrades: [], momentum30d: 0, analystTrendText: 'STABLE', strongBuys: 0, buys: 0, holds: 0, sells: 0, analystCount: 0 };
+// ── Compact prompt (~250-300 tokens) ─────────────────────────────────────────
+
+function buildPrompt(earning, headlines) {
+  const { ticker, company, reportDate, reportTime, epsEstimate, revenueEstimate, fiscalQuarter, beatRateLast4 = 0 } = earning;
+  const newsSection = headlines.length
+    ? headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')
+    : 'No recent headlines';
+  const revStr = revenueEstimate ? `Rev est: $${(revenueEstimate / 1e9).toFixed(1)}B | ` : '';
+  return `Equity analyst. Predict earnings beat/miss for:
+${ticker} (${company}) | ${fiscalQuarter || 'Q?'} | ${reportDate} ${reportTime || ''}
+EPS est: ${epsEstimate != null ? '$' + epsEstimate : 'N/A'} | ${revStr}Historical beat rate: ${beatRateLast4}/4
+
+Recent headlines (Yahoo Finance):
+${newsSection}
+
+JSON only, no markdown, no explanation:
+{"signal":"BUY","confidence":72,"beatProbability":68,"sentiment":"POSITIVE","newsSentiment":"POSITIVE","analystTrend":"STABLE","summary":"2 sentences specific to this company based on the data above.","keyFactors":["factor 1","factor 2","factor 3"],"risks":["risk 1","risk 2"]}`;
 }
+
+// ── Main export ───────────────────────────────────────────────────────────────
 
 async function analyzeEarning(earning) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return { error: 'GEMINI_API_KEY not configured', ticker: earning.ticker };
 
-  const { ticker, company, reportDate, reportTime, epsEstimate, revenueEstimate, fiscalQuarter, beatRateLast4 = 0, avgSurprisePct = 0 } = earning;
+  const remaining = await getRemainingQuota();
+  if (remaining <= 0) {
+    console.log(`[gemini] ${earning.ticker}: daily quota exhausted (${FREE_RPD} RPD)`);
+    return { error: 'daily_quota_exhausted', ticker: earning.ticker };
+  }
 
-  let ctx = defaultCtx();
-  try { ctx = await fetchYahooContext(ticker); } catch {}
-
-  const headlineText = ctx.recentHeadlines.length
-    ? ctx.recentHeadlines.map((n, i) => `${i + 1}. ${n.headline} (${n.source})`).join('\n')
-    : 'No recent news available';
-
-  const prompt = `You are a professional equity analyst specializing in earnings predictions.
-
-Analyze this upcoming earnings report and predict if the company will beat or miss estimates.
-
-COMPANY: ${company} (${ticker})
-REPORT DATE: ${reportDate} ${reportTime || ''}
-QUARTER: ${fiscalQuarter || 'Unknown'}
-
-ESTIMATES:
-- EPS Estimate: ${epsEstimate != null ? '$' + epsEstimate : 'N/A'}
-- Revenue Estimate: ${revenueEstimate ? '$' + (revenueEstimate / 1e9).toFixed(1) + 'B' : 'N/A'}
-- Historical beat rate: ${beatRateLast4}/4 last quarters
-
-RECENT NEWS (last 14 days):
-${headlineText}
-
-Respond ONLY with this exact JSON object, no markdown, no code blocks:
-{
-  "signal": "BUY",
-  "confidence": 72,
-  "beatProbability": 68,
-  "sentiment": "POSITIVE",
-  "newsSentiment": "POSITIVE",
-  "analystTrend": "STABLE",
-  "summary": "2-3 sentences specific to this company.",
-  "keyFactors": ["factor max 10 words", "factor 2", "factor 3"],
-  "risks": ["risk max 10 words", "risk 2"],
-  "newsHeadlines": [{"headline": "headline text", "source": "source name", "sentiment": "POSITIVE"}]
-}
-
-signal must be BUY, SELL, or HOLD. sentiment must be POSITIVE, NEGATIVE, MIXED, or NEUTRAL. analystTrend must be UPGRADING, DOWNGRADING, or STABLE.`;
+  const headlines = await fetchYahooContext(earning.ticker);
+  const prompt = buildPrompt(earning, headlines);
 
   try {
     const rawText = await callGemini(prompt, apiKey);
-
-    // Strip markdown code blocks if present
-    const cleaned = rawText
-      .replace(/```json\s*/g, '')
-      .replace(/```\s*/g, '')
-      .trim();
-
+    const cleaned = rawText.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error(`No JSON in response: ${rawText.slice(0, 100)}`);
+    if (!jsonMatch) throw new Error(`No JSON in response: ${rawText.slice(0, 80)}`);
 
     const parsed = JSON.parse(jsonMatch[0]);
     const result = {
-      ticker,
+      ticker: earning.ticker,
       signal: ['BUY', 'SELL', 'HOLD'].includes(parsed.signal) ? parsed.signal : 'HOLD',
       confidence: Math.min(100, Math.max(0, parseInt(parsed.confidence) || 50)),
       beatProbability: Math.min(100, Math.max(0, parseInt(parsed.beatProbability) || 50)),
       sentiment: ['POSITIVE', 'NEGATIVE', 'MIXED', 'NEUTRAL'].includes(parsed.sentiment) ? parsed.sentiment : 'NEUTRAL',
       newsSentiment: ['POSITIVE', 'NEGATIVE', 'NEUTRAL'].includes(parsed.newsSentiment) ? parsed.newsSentiment : 'NEUTRAL',
-      analystTrend: ['UPGRADING', 'DOWNGRADING', 'STABLE'].includes(parsed.analystTrend) ? parsed.analystTrend : ctx.analystTrendText,
+      analystTrend: ['UPGRADING', 'DOWNGRADING', 'STABLE'].includes(parsed.analystTrend) ? parsed.analystTrend : 'STABLE',
       summary: parsed.summary || '',
       keyFactors: Array.isArray(parsed.keyFactors) ? parsed.keyFactors.slice(0, 5) : [],
       risks: Array.isArray(parsed.risks) ? parsed.risks.slice(0, 4) : [],
@@ -162,21 +186,21 @@ signal must be BUY, SELL, or HOLD. sentiment must be POSITIVE, NEGATIVE, MIXED, 
     };
 
     if (Array.isArray(parsed.newsHeadlines)) {
-      for (const n of parsed.newsHeadlines.slice(0, 10)) {
+      for (const n of parsed.newsHeadlines.slice(0, 8)) {
         await query(
           `INSERT INTO earnings_ai_news (ticker, headline, source, sentiment, earnings_date)
            VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,
-          [ticker, n.headline, n.source, n.sentiment, reportDate]
+          [earning.ticker, n.headline, n.source, n.sentiment, earning.reportDate]
         ).catch(() => {});
       }
     }
 
-    console.log(`[gemini] ${ticker}: ${result.signal} conf=${result.confidence}% beat=${result.beatProbability}% model=${GEMINI_MODEL}`);
+    console.log(`[gemini] ${earning.ticker}: ${result.signal} conf=${result.confidence}% beat=${result.beatProbability}% (quota: ${remaining - 1} left)`);
     return result;
   } catch (e) {
-    console.error(`[gemini] ${ticker} failed:`, e.message);
-    return { error: e.message, ticker };
+    console.error(`[gemini] ${earning.ticker} failed:`, e.message);
+    return { error: e.message, ticker: earning.ticker };
   }
 }
 
-module.exports = { analyzeEarning, GEMINI_MODEL };
+module.exports = { analyzeEarning, GEMINI_MODEL, FREE_RPD, RPM_DELAY_MS, getRemainingQuota, getUsedToday };

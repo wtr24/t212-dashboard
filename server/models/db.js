@@ -254,6 +254,17 @@ async function initDB() {
       ('earnings_ai_last_run', NULL),
       ('earnings_ai_last_run_count', '0')
     ON CONFLICT (key) DO NOTHING;
+
+    CREATE TABLE IF NOT EXISTS gemini_usage (
+      id SERIAL PRIMARY KEY,
+      model VARCHAR(50) NOT NULL,
+      date DATE NOT NULL DEFAULT CURRENT_DATE,
+      requests_today INT DEFAULT 0,
+      tokens_used INT DEFAULT 0,
+      last_request_at TIMESTAMP,
+      UNIQUE(model, date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_gemini_usage_date ON gemini_usage(model, date);
   `);
 
   await pool.query(`

@@ -91,17 +91,27 @@ router.get('/ai-test', async (req, res) => {
 router.get('/ai-status', async (req, res) => {
   try {
     const { getIsRunning } = require('../jobs/earningsAiJob');
-    const r = await query(
-      `SELECT key, value FROM app_settings WHERE key IN ('earnings_ai_last_run','earnings_ai_last_run_count','earnings_ai_run_time','earnings_ai_enabled')`
-    ).catch(() => ({ rows: [] }));
+    const { getRemainingQuota, getUsedToday, FREE_RPD, GEMINI_MODEL } = require('../services/geminiEarnings');
+    const [settingsRes, remaining, used] = await Promise.all([
+      query(`SELECT key, value FROM app_settings WHERE key IN ('earnings_ai_last_run','earnings_ai_last_run_count','earnings_ai_run_time','earnings_ai_enabled')`).catch(() => ({ rows: [] })),
+      getRemainingQuota(),
+      getUsedToday(),
+    ]);
     const settings = {};
-    for (const row of r.rows) settings[row.key] = row.value;
+    for (const row of settingsRes.rows) settings[row.key] = row.value;
+    const estimatedMins = ((remaining * (15 / 60))).toFixed(0);
     res.json({
       isRunning: getIsRunning(),
       lastRun: settings.earnings_ai_last_run || null,
       lastRunCount: parseInt(settings.earnings_ai_last_run_count) || 0,
       runTime: settings.earnings_ai_run_time || '07:00',
       enabled: settings.earnings_ai_enabled !== 'false',
+      quotaUsedToday: used,
+      quotaRemainingToday: remaining,
+      quotaTotal: FREE_RPD,
+      modelInUse: GEMINI_MODEL,
+      estimatedMinsForRemaining: estimatedMins,
+      waveSchedule: ['Wave 1 06:30 (portfolio)', 'Wave 2 07:00 (top BMO)', 'Wave 3 12:00 (remaining)'],
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -109,9 +119,12 @@ router.get('/ai-status', async (req, res) => {
 router.post('/ai-run', async (req, res) => {
   try {
     const { runEarningsAiAnalysis, getIsRunning } = require('../jobs/earningsAiJob');
+    const { getRemainingQuota, FREE_RPD } = require('../services/geminiEarnings');
     if (getIsRunning()) return res.json({ triggered: false, reason: 'already_running' });
+    const remaining = await getRemainingQuota();
+    if (remaining <= 0) return res.json({ triggered: false, reason: 'quota_exhausted', quotaRemaining: 0, resetAt: 'midnight UTC' });
     runEarningsAiAnalysis(true).catch(e => console.error('[earnings ai-run]', e.message));
-    res.json({ triggered: true });
+    res.json({ triggered: true, willAnalyse: remaining, quotaRemaining: remaining, estimatedMins: ((remaining * 15) / 60).toFixed(1) });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

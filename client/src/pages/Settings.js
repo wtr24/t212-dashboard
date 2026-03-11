@@ -67,7 +67,7 @@ function EarningsAiSection() {
   const refreshStatus = () => {
     fetch(`${BASE}/earnings/ai-status`)
       .then(r => r.json())
-      .then(s => { setAiStatus(s); setRunning(s.isRunning); })
+      .then(s => { setAiStatus(s); setRunning(s.isRunning); if (s.runTime) setRunTime(s.runTime); if (s.enabled != null) setEnabled(s.enabled); })
       .catch(() => {});
   };
 
@@ -117,20 +117,40 @@ function EarningsAiSection() {
         <span style={{ fontSize: 11, color: '#6366f1', background: 'rgba(99,102,241,0.12)', padding: '2px 8px', borderRadius: 5, fontWeight: 600 }}>Gemini Flash 2.0</span>
       </div>
 
-      {/* Status bar */}
+      {/* Quota bar */}
       {aiStatus && (
-        <div style={{ display: 'flex', gap: 20, marginBottom: 20, flexWrap: 'wrap' }}>
-          {[
-            { label: 'Last Run', value: aiStatus.lastRun || 'Never' },
-            { label: 'Analysed', value: aiStatus.lastRunCount ? `${aiStatus.lastRunCount} stocks` : '—' },
-            { label: 'Scheduled', value: aiStatus.runTime || '07:00' },
-            { label: 'Status', value: aiStatus.isRunning ? 'Running...' : (aiStatus.enabled ? 'Enabled' : 'Disabled'), color: aiStatus.isRunning ? '#f59e0b' : (aiStatus.enabled ? '#10b981' : 'var(--text-3)') },
-          ].map(({ label, value, color }) => (
-            <div key={label}>
-              <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 3 }}>{label}</div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: color || 'var(--text)', fontFamily: label === 'Last Run' || label === 'Scheduled' ? 'JetBrains Mono, monospace' : 'inherit' }}>{value}</div>
+        <div style={{ marginBottom: 20 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+              {[
+                { label: 'Last Run', value: aiStatus.lastRun || 'Never' },
+                { label: 'Today', value: aiStatus.lastRunCount ? `${aiStatus.lastRunCount} analysed` : '—' },
+                { label: 'Model', value: aiStatus.modelInUse || 'gemini-2.5-flash' },
+              ].map(({ label, value }) => (
+                <div key={label}>
+                  <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 }}>{label}</div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', fontFamily: 'JetBrains Mono, monospace' }}>{value}</div>
+                </div>
+              ))}
             </div>
-          ))}
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 }}>Daily Quota</div>
+              <div style={{ fontSize: 18, fontWeight: 800, fontFamily: 'JetBrains Mono, monospace', color: aiStatus.quotaRemainingToday <= 5 ? '#ef4444' : aiStatus.quotaRemainingToday <= 10 ? '#f59e0b' : '#10b981' }}>
+                {aiStatus.quotaRemainingToday}/{aiStatus.quotaTotal || 20}
+              </div>
+              <div style={{ fontSize: 10, color: 'var(--text-3)' }}>resets midnight UTC</div>
+            </div>
+          </div>
+          <div style={{ height: 6, background: 'var(--surface-2)', borderRadius: 3, overflow: 'hidden' }}>
+            <div style={{ height: '100%', borderRadius: 3, transition: 'width 0.4s', background: aiStatus.quotaRemainingToday <= 5 ? '#ef4444' : aiStatus.quotaRemainingToday <= 10 ? '#f59e0b' : '#10b981', width: `${Math.round(((aiStatus.quotaTotal || 20) - (aiStatus.quotaUsedToday || 0)) / (aiStatus.quotaTotal || 20) * 100)}%` }} />
+          </div>
+          <div style={{ display: 'flex', gap: 16, marginTop: 10, fontSize: 11, color: 'var(--text-3)', flexWrap: 'wrap' }}>
+            {(aiStatus.waveSchedule || []).map((w, i) => (
+              <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#6366f1', display: 'inline-block' }} />{w}
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
@@ -170,14 +190,22 @@ function EarningsAiSection() {
         </button>
 
         {/* Run now button */}
-        <button
-          onClick={runNow}
-          disabled={running}
-          style={{ display: 'flex', alignItems: 'center', gap: 6, background: running ? 'var(--surface-2)' : 'rgba(16,185,129,0.1)', border: `1px solid ${running ? 'var(--border)' : 'rgba(16,185,129,0.3)'}`, borderRadius: 10, padding: '9px 18px', color: running ? 'var(--text-3)' : '#10b981', fontSize: 13, fontWeight: 600, cursor: running ? 'not-allowed' : 'pointer', opacity: running ? 0.7 : 1 }}
-        >
-          {running ? <Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={13} />}
-          {running ? 'Analysing...' : 'Run Now (Force)'}
-        </button>
+        {aiStatus?.quotaRemainingToday === 0 ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, fontSize: 12, color: '#ef4444', fontWeight: 500 }}>
+            Quota exhausted · resets midnight UTC
+          </div>
+        ) : (
+          <button
+            onClick={runNow}
+            disabled={running}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, background: running ? 'var(--surface-2)' : 'rgba(16,185,129,0.1)', border: `1px solid ${running ? 'var(--border)' : 'rgba(16,185,129,0.3)'}`, borderRadius: 10, padding: '9px 18px', color: running ? 'var(--text-3)' : '#10b981', fontSize: 13, fontWeight: 600, cursor: running ? 'not-allowed' : 'pointer', opacity: running ? 0.7 : 1 }}
+          >
+            {running ? <Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={13} />}
+            {running
+              ? `Analysing... (~${aiStatus?.estimatedMinsForRemaining || '?'}m)`
+              : `Run Now · ${aiStatus?.quotaRemainingToday ?? '?'} of ${aiStatus?.quotaTotal ?? 20} remaining`}
+          </button>
+        )}
 
         {running && (
           <button onClick={refreshStatus} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1px solid var(--border)', borderRadius: 10, padding: '9px 14px', color: 'var(--text-3)', fontSize: 12, cursor: 'pointer' }}>
@@ -197,9 +225,14 @@ function EarningsAiSection() {
         </button>
         {showGeminiInfo && (
           <div style={{ padding: '0 16px 16px', fontSize: 12, color: 'var(--text-3)', lineHeight: 1.9 }}>
-            <div style={{ marginBottom: 8 }}>Add <code style={{ background: 'var(--bg)', padding: '1px 6px', borderRadius: 4, fontFamily: 'JetBrains Mono, monospace', color: '#6366f1' }}>GEMINI_API_KEY=your_key</code> to your <code style={{ background: 'var(--bg)', padding: '1px 6px', borderRadius: 4 }}>server/.env</code> and docker-compose environment.</div>
+            <div style={{ marginBottom: 8 }}>Add <code style={{ background: 'var(--bg)', padding: '1px 6px', borderRadius: 4, fontFamily: 'JetBrains Mono, monospace', color: '#6366f1' }}>GEMINI_API_KEY=your_key</code> to your <code style={{ background: 'var(--bg)', padding: '1px 6px', borderRadius: 4 }}>nas-deploy/.env</code></div>
             <div style={{ marginBottom: 4 }}>Get a free key at <span style={{ color: '#6366f1', fontWeight: 500 }}>aistudio.google.com/app/apikey</span></div>
-            <div>Free tier: 15 req/min · 1,500 req/day — sufficient for daily earnings analysis of ~30 stocks with a 2s delay between calls.</div>
+            <div style={{ marginBottom: 8, padding: '8px 10px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 8 }}>
+              <strong style={{ color: '#f59e0b' }}>Free tier limits:</strong> 20 analyses/day · 5/min · resets midnight UTC<br />
+              News context is pre-fetched from Yahoo Finance and passed to Gemini — Gemini does <em>not</em> browse the internet on free tier.<br />
+              Waves auto-analyse your top 20 priority earnings across 3 scheduled runs (06:30, 07:00, 12:00).
+            </div>
+            <div>Upgrade to pay-as-you-go at <span style={{ color: '#6366f1' }}>aistudio.google.com</span> for unlimited analyses (set <code style={{ background: 'var(--bg)', padding: '1px 4px', borderRadius: 3 }}>GEMINI_RPD=1000</code> env var).</div>
           </div>
         )}
       </div>
