@@ -72,19 +72,58 @@ router.post('/refresh', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// AI diagnostic test — single stock, returns raw error/result
+// AI diagnostic: list available models + test specific model
 router.get('/ai-test', async (req, res) => {
-  try {
-    const { analyzeEarning, GEMINI_MODEL } = require('../services/geminiEarnings');
-    const ticker = (req.query.ticker || 'AAPL').toUpperCase();
-    const keyExists = !!process.env.GEMINI_API_KEY;
-    const keyLen = process.env.GEMINI_API_KEY?.length || 0;
-    const result = await analyzeEarning({
-      ticker, company: ticker + ' Corp', reportDate: new Date().toISOString().split('T')[0],
-      epsEstimate: 1.50, fiscalQuarter: 'Q1 2026', beatRateLast4: 3, avgSurprisePct: 2.0,
+  const https = require('https');
+  const key = process.env.GEMINI_API_KEY;
+
+  function httpsGet(path) {
+    return new Promise((resolve, reject) => {
+      https.get({ hostname: 'generativelanguage.googleapis.com', path, timeout: 10000 }, r => {
+        let d = ''; r.on('data', c => { d += c; }); r.on('end', () => resolve({ status: r.statusCode, body: d.slice(0, 600) }));
+      }).on('error', reject);
     });
-    res.json({ keyExists, keyLen, model: GEMINI_MODEL, result });
-  } catch (e) { res.status(500).json({ error: e.message, stack: e.stack?.slice(0, 300) }); }
+  }
+
+  function httpsPost(path, body) {
+    return new Promise((resolve, reject) => {
+      const buf = Buffer.from(body);
+      const req = https.request({ hostname: 'generativelanguage.googleapis.com', path, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': buf.length }, timeout: 15000 }, r => {
+        let d = ''; r.on('data', c => { d += c; }); r.on('end', () => resolve({ status: r.statusCode, body: d.slice(0, 400) }));
+      });
+      req.on('error', reject); req.write(buf); req.end();
+    });
+  }
+
+  try {
+    const keyLen = key?.length || 0;
+    const prompt = JSON.stringify({ contents: [{ parts: [{ text: 'Say: OK' }] }], generationConfig: { maxOutputTokens: 10 } });
+
+    const [listV1beta, listV1, flash15, flash15v1, flashLite, geminiPro] = await Promise.all([
+      httpsGet(`/v1beta/models?key=${key}`),
+      httpsGet(`/v1/models?key=${key}`),
+      httpsPost(`/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, prompt),
+      httpsPost(`/v1/models/gemini-1.5-flash:generateContent?key=${key}`, prompt),
+      httpsPost(`/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${key}`, prompt),
+      httpsPost(`/v1beta/models/gemini-pro:generateContent?key=${key}`, prompt),
+    ]);
+
+    const parseNames = (r) => {
+      try { const j = JSON.parse(r.body); return (j.models || []).map(m => m.name).filter(n => n.includes('flash') || n.includes('pro') || n.includes('gemini')).slice(0, 10); } catch { return []; }
+    };
+
+    res.json({
+      keyLen,
+      models_v1beta: { status: listV1beta.status, names: parseNames(listV1beta) },
+      models_v1: { status: listV1.status, names: parseNames(listV1) },
+      tests: {
+        'v1beta/gemini-1.5-flash': { status: flash15.status, body: flash15.body.slice(0, 100) },
+        'v1/gemini-1.5-flash': { status: flash15v1.status, body: flash15v1.body.slice(0, 100) },
+        'v1beta/gemini-1.5-flash-latest': { status: flashLite.status, body: flashLite.body.slice(0, 100) },
+        'v1beta/gemini-pro': { status: geminiPro.status, body: geminiPro.body.slice(0, 100) },
+      },
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // AI routes
