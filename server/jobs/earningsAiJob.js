@@ -38,10 +38,18 @@ async function runEarningsAiAnalysis(force = false) {
   const started = new Date();
   let analysed = 0; let failed = 0; const tickers = [];
 
+  // Clean bad error strings stored from previous failed runs
+  await query(
+    `UPDATE earnings_calendar SET ai_signal=NULL, ai_confidence=NULL, ai_beat_probability=NULL,
+     ai_summary=NULL, ai_sentiment=NULL, ai_news_sentiment=NULL, ai_analyst_trend=NULL,
+     ai_key_factors=NULL, ai_risks=NULL, ai_generated_at=NULL, ai_model=NULL
+     WHERE ai_summary ILIKE '%request failed%' OR ai_summary ILIKE '%unavailable%' OR ai_summary ILIKE '%404%'`
+  ).catch(() => {});
+
   try {
     const today = new Date().toISOString().split('T')[0];
     let { rows } = await query(
-      `SELECT * FROM earnings_calendar WHERE report_date=$1 AND status='upcoming' ORDER BY ai_confidence DESC NULLS LAST LIMIT 30`,
+      `SELECT * FROM earnings_calendar WHERE report_date=$1 AND status='upcoming' ORDER BY ticker LIMIT 30`,
       [today]
     ).catch(() => ({ rows: [] }));
 

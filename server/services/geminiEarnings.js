@@ -1,46 +1,70 @@
-const axios = require('axios');
+const https = require('https');
 const { query } = require('../models/db');
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-const GEMINI_MODEL = 'gemini-2.0-flash-exp';
+const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
 
-async function fetchYahooContext(ticker) {
-  const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36';
-  const headers = { 'User-Agent': UA, Accept: 'application/json' };
+function callGemini(prompt, apiKey) {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 1000 },
+    });
+    const options = {
+      hostname: 'generativelanguage.googleapis.com',
+      path: `/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+    };
+    const req = https.request(options, res => {
+      let data = '';
+      res.on('data', d => { data += d; });
+      res.on('end', () => {
+        if (res.statusCode !== 200) {
+          reject(new Error(`Gemini ${res.statusCode}: ${data.slice(0, 300)}`));
+          return;
+        }
+        try {
+          const parsed = JSON.parse(data);
+          const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          resolve(text);
+        } catch (e) {
+          reject(new Error(`Parse failed: ${data.slice(0, 100)}`));
+        }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(30000, () => { req.destroy(); reject(new Error('Gemini timeout')); });
+    req.write(body);
+    req.end();
+  });
+}
 
-  const [newsRes, summaryRes] = await Promise.allSettled([
-    axios.get(`https://query1.finance.yahoo.com/v8/finance/search?q=${ticker}&newsCount=10&quotesCount=0`, { headers, timeout: 8000 }),
-    axios.get(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}`, {
-      params: { modules: 'recommendationTrend,upgradeDowngradeHistory,defaultKeyStatistics,price' },
-      headers, timeout: 10000,
-    }),
-  ]);
+function fetchYahooContext(ticker) {
+  return new Promise(resolve => {
+    const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36';
 
-  const news = newsRes.status === 'fulfilled'
-    ? (newsRes.value.data?.news || []).slice(0, 10).map(n => ({ headline: n.title, source: n.publisher, date: n.providerPublishTime }))
-    : [];
+    const newsReq = https.get(
+      `https://query1.finance.yahoo.com/v8/finance/search?q=${ticker}&newsCount=10&quotesCount=0`,
+      { headers: { 'User-Agent': UA, Accept: 'application/json' }, timeout: 8000 },
+      res => {
+        let d = '';
+        res.on('data', c => { d += c; });
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(d);
+            const news = (json?.news || []).slice(0, 10).map(n => ({ headline: n.title, source: n.publisher }));
+            resolve({ recentHeadlines: news, analystUpgrades: [], momentum30d: 0, analystTrendText: 'STABLE', strongBuys: 0, buys: 0, holds: 0, sells: 0, analystCount: 0 });
+          } catch { resolve(defaultCtx()); }
+        });
+      }
+    );
+    newsReq.on('error', () => resolve(defaultCtx()));
+    newsReq.on('timeout', () => { newsReq.destroy(); resolve(defaultCtx()); });
+  });
+}
 
-  const summaryData = summaryRes.status === 'fulfilled' ? summaryRes.value.data?.quoteSummary?.result?.[0] : null;
-  const upgrades = (summaryData?.upgradeDowngradeHistory?.history || [])
-    .filter(u => { const d = new Date(u.epochGradeDate * 1000); return (Date.now() - d) < 30 * 86400000; })
-    .slice(0, 5)
-    .map(u => ({ firm: u.firm, fromGrade: u.fromGrade, toGrade: u.toGrade, action: u.action }));
-
-  const price = summaryData?.price || {};
-  const stats = summaryData?.defaultKeyStatistics || {};
-  const recTrend = (summaryData?.recommendationTrend?.trend || [])[0] || {};
-
-  return {
-    recentHeadlines: news,
-    analystUpgrades: upgrades,
-    analystCount: (recTrend.strongBuy || 0) + (recTrend.buy || 0) + (recTrend.hold || 0) + (recTrend.sell || 0) + (recTrend.strongSell || 0),
-    strongBuys: recTrend.strongBuy || 0,
-    buys: recTrend.buy || 0,
-    holds: recTrend.hold || 0,
-    sells: (recTrend.sell || 0) + (recTrend.strongSell || 0),
-    momentum30d: price.regularMarketChangePercent?.raw || 0,
-    analystTrendText: upgrades.length > 0 ? (upgrades.filter(u => u.action === 'up').length > upgrades.filter(u => u.action === 'down').length ? 'UPGRADING' : 'DOWNGRADING') : 'STABLE',
-  };
+function defaultCtx() {
+  return { recentHeadlines: [], analystUpgrades: [], momentum30d: 0, analystTrendText: 'STABLE', strongBuys: 0, buys: 0, holds: 0, sells: 0, analystCount: 0 };
 }
 
 async function analyzeEarning(earning) {
@@ -49,20 +73,12 @@ async function analyzeEarning(earning) {
 
   const { ticker, company, reportDate, reportTime, epsEstimate, revenueEstimate, fiscalQuarter, beatRateLast4 = 0, avgSurprisePct = 0 } = earning;
 
-  let ctx = { recentHeadlines: [], analystUpgrades: [], momentum30d: 0, analystTrendText: 'STABLE', strongBuys: 0, buys: 0, holds: 0, sells: 0 };
+  let ctx = defaultCtx();
   try { ctx = await fetchYahooContext(ticker); } catch {}
 
   const headlineText = ctx.recentHeadlines.length
     ? ctx.recentHeadlines.map((n, i) => `${i + 1}. ${n.headline} (${n.source})`).join('\n')
     : 'No recent news available';
-
-  const upgradeText = ctx.analystUpgrades.length
-    ? ctx.analystUpgrades.map(u => `${u.firm}: ${u.fromGrade || 'N/A'} → ${u.toGrade} (${u.action})`).join('\n')
-    : 'No recent analyst changes';
-
-  const analystBreakdown = ctx.analystCount > 0
-    ? `${ctx.strongBuys} Strong Buy, ${ctx.buys} Buy, ${ctx.holds} Hold, ${ctx.sells} Sell/Strong Sell`
-    : 'No analyst data';
 
   const prompt = `You are a professional equity analyst specializing in earnings predictions.
 
@@ -76,24 +92,11 @@ ESTIMATES:
 - EPS Estimate: ${epsEstimate != null ? '$' + epsEstimate : 'N/A'}
 - Revenue Estimate: ${revenueEstimate ? '$' + (revenueEstimate / 1e9).toFixed(1) + 'B' : 'N/A'}
 - Historical beat rate: ${beatRateLast4}/4 last quarters
-- Average historical surprise: ${avgSurprisePct.toFixed ? avgSurprisePct.toFixed(1) : avgSurprisePct}%
 
 RECENT NEWS (last 14 days):
 ${headlineText}
 
-ANALYST ACTIVITY (last 30 days):
-${upgradeText}
-
-ANALYST CONSENSUS: ${analystBreakdown}
-30-DAY PRICE MOMENTUM: ${ctx.momentum30d >= 0 ? '+' : ''}${(ctx.momentum30d * 100).toFixed(1)}%
-
-Based on ALL of this data provide your earnings prediction. Consider:
-1. News sentiment - are headlines positive or negative about this company?
-2. Analyst momentum - are analysts upgrading or downgrading?
-3. Historical pattern - does this company consistently beat estimates?
-4. Macro factors in recent news affecting this sector
-
-Respond ONLY with this exact JSON object, no other text:
+Respond ONLY with this exact JSON object, no markdown, no code blocks:
 {
   "signal": "BUY",
   "confidence": 72,
@@ -101,34 +104,35 @@ Respond ONLY with this exact JSON object, no other text:
   "sentiment": "POSITIVE",
   "newsSentiment": "POSITIVE",
   "analystTrend": "STABLE",
-  "summary": "2-3 sentences specific to this company. What you expect and why based on the data above.",
-  "keyFactors": ["factor max 10 words", "factor 2", "factor 3", "factor 4"],
-  "risks": ["risk max 10 words", "risk 2", "risk 3"],
+  "summary": "2-3 sentences specific to this company.",
+  "keyFactors": ["factor max 10 words", "factor 2", "factor 3"],
+  "risks": ["risk max 10 words", "risk 2"],
   "newsHeadlines": [{"headline": "headline text", "source": "source name", "sentiment": "POSITIVE"}]
 }
 
 signal must be BUY, SELL, or HOLD. sentiment must be POSITIVE, NEGATIVE, MIXED, or NEUTRAL. analystTrend must be UPGRADING, DOWNGRADING, or STABLE.`;
 
   try {
-    const res = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
-      { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.2, maxOutputTokens: 1000 } },
-      { timeout: 30000, headers: { 'Content-Type': 'application/json' } }
-    );
+    const rawText = await callGemini(prompt, apiKey);
 
-    const rawText = res.data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const jsonMatch = rawText.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('No JSON in response');
+    // Strip markdown code blocks if present
+    const cleaned = rawText
+      .replace(/```json\s*/g, '')
+      .replace(/```\s*/g, '')
+      .trim();
+
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error(`No JSON in response: ${rawText.slice(0, 100)}`);
 
     const parsed = JSON.parse(jsonMatch[0]);
     const result = {
       ticker,
-      signal: ['BUY','SELL','HOLD'].includes(parsed.signal) ? parsed.signal : 'HOLD',
+      signal: ['BUY', 'SELL', 'HOLD'].includes(parsed.signal) ? parsed.signal : 'HOLD',
       confidence: Math.min(100, Math.max(0, parseInt(parsed.confidence) || 50)),
       beatProbability: Math.min(100, Math.max(0, parseInt(parsed.beatProbability) || 50)),
-      sentiment: ['POSITIVE','NEGATIVE','MIXED','NEUTRAL'].includes(parsed.sentiment) ? parsed.sentiment : 'NEUTRAL',
-      newsSentiment: ['POSITIVE','NEGATIVE','NEUTRAL'].includes(parsed.newsSentiment) ? parsed.newsSentiment : 'NEUTRAL',
-      analystTrend: ['UPGRADING','DOWNGRADING','STABLE'].includes(parsed.analystTrend) ? parsed.analystTrend : ctx.analystTrendText,
+      sentiment: ['POSITIVE', 'NEGATIVE', 'MIXED', 'NEUTRAL'].includes(parsed.sentiment) ? parsed.sentiment : 'NEUTRAL',
+      newsSentiment: ['POSITIVE', 'NEGATIVE', 'NEUTRAL'].includes(parsed.newsSentiment) ? parsed.newsSentiment : 'NEUTRAL',
+      analystTrend: ['UPGRADING', 'DOWNGRADING', 'STABLE'].includes(parsed.analystTrend) ? parsed.analystTrend : ctx.analystTrendText,
       summary: parsed.summary || '',
       keyFactors: Array.isArray(parsed.keyFactors) ? parsed.keyFactors.slice(0, 5) : [],
       risks: Array.isArray(parsed.risks) ? parsed.risks.slice(0, 4) : [],
@@ -145,15 +149,11 @@ signal must be BUY, SELL, or HOLD. sentiment must be POSITIVE, NEGATIVE, MIXED, 
       }
     }
 
-    console.log(`[gemini] ${ticker}: ${result.signal} conf=${result.confidence}% beat=${result.beatProbability}%`);
+    console.log(`[gemini] ${ticker}: ${result.signal} conf=${result.confidence}% beat=${result.beatProbability}% model=${GEMINI_MODEL}`);
     return result;
   } catch (e) {
-    console.error(`[gemini] ${ticker} failed:`, e.response?.data?.error?.message || e.message);
-    return {
-      ticker, signal: 'HOLD', confidence: 30, beatProbability: 50,
-      sentiment: 'NEUTRAL', newsSentiment: 'NEUTRAL', analystTrend: ctx.analystTrendText,
-      summary: `Analysis unavailable: ${e.message}`, keyFactors: [], risks: [], model: 'error',
-    };
+    console.error(`[gemini] ${ticker} failed:`, e.message);
+    return { error: e.message, ticker };
   }
 }
 

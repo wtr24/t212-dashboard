@@ -36,6 +36,7 @@ services:
       - REDIS_URL=redis://redis:6379
       - PORT=5002
       - NODE_ENV=production
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-1.5-flash}
     depends_on:
       postgres:
         condition: service_healthy

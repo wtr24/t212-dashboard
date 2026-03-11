@@ -32,11 +32,7 @@ function TimeBadge({ time }) {
 }
 
 function AiSignalBadge({ signal, confidence }) {
-  if (!signal) return (
-    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-3)', background: 'var(--surface-2)', padding: '2px 7px', borderRadius: 5 }}>
-      AI Pending
-    </span>
-  );
+  if (!signal) return null;
   const colors = { BUY: '#10b981', SELL: '#ef4444', HOLD: '#f59e0b' };
   const c = colors[signal] || 'var(--text-3)';
   return (
@@ -47,7 +43,7 @@ function AiSignalBadge({ signal, confidence }) {
 }
 
 function BeatBar({ probability }) {
-  if (probability == null) return null;
+  if (probability == null || probability === 50) return null;
   const pct = Math.min(100, Math.max(0, probability));
   const color = pct >= 65 ? '#10b981' : pct >= 45 ? '#f59e0b' : '#ef4444';
   return (
@@ -109,15 +105,17 @@ function AiDetailModal({ ticker, onClose }) {
           </div>
         ) : (
           <>
-            {/* Beat probability arc */}
-            <div style={{ textAlign: 'center', marginBottom: 20 }}>
-              <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'var(--surface-2)', borderRadius: 16, padding: '16px 32px' }}>
-                <div style={{ fontSize: 36, fontWeight: 800, fontFamily: 'JetBrains Mono, monospace', color: e.ai_beat_probability >= 65 ? '#10b981' : e.ai_beat_probability >= 45 ? '#f59e0b' : '#ef4444' }}>
-                  {e.ai_beat_probability}%
+            {/* Beat probability */}
+            {e.ai_beat_probability != null && (
+              <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'var(--surface-2)', borderRadius: 16, padding: '16px 32px' }}>
+                  <div style={{ fontSize: 36, fontWeight: 800, fontFamily: 'JetBrains Mono, monospace', color: e.ai_beat_probability >= 65 ? '#10b981' : e.ai_beat_probability >= 45 ? '#f59e0b' : '#ef4444' }}>
+                    {e.ai_beat_probability}%
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 500 }}>Beat Probability</div>
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 500 }}>Beat Probability</div>
               </div>
-            </div>
+            )}
 
             {/* Signal row */}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
@@ -255,17 +253,50 @@ function EarningsCard({ e, expanded, onToggle }) {
                 ))}
               </div>
               {hasAi && e.ai_summary && (
-                <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--surface-2)', borderRadius: 8, fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
-                  {e.ai_summary}
+                <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--surface-2)', borderLeft: `3px solid ${e.ai_signal === 'BUY' ? '#10b981' : e.ai_signal === 'SELL' ? '#ef4444' : '#f59e0b'}`, borderRadius: '0 8px 8px 0', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+                  <Sparkles size={10} color="#6366f1" style={{ marginRight: 4 }} />{e.ai_summary}
+                </div>
+              )}
+              {hasAi && e.ai_key_factors?.length > 0 && e.ai_risks?.length > 0 && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#10b981', textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 6 }}>Why It Might Beat</div>
+                    {e.ai_key_factors.slice(0, 3).map((f, i) => (
+                      <div key={i} style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 3, display: 'flex', gap: 5 }}>
+                        <span style={{ color: '#10b981', flexShrink: 0 }}>✓</span>{f}
+                      </div>
+                    ))}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: '#ef4444', textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 6 }}>Key Risks</div>
+                    {e.ai_risks.slice(0, 3).map((r, i) => (
+                      <div key={i} style={{ fontSize: 11, color: 'var(--text-2)', marginBottom: 3, display: 'flex', gap: 5 }}>
+                        <span style={{ color: '#ef4444', flexShrink: 0 }}>!</span>{r}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
               {hasAi && (
-                <button
-                  onClick={ev => { ev.stopPropagation(); setShowAiModal(true); }}
-                  style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 8, padding: '6px 12px', color: '#6366f1', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
-                >
-                  <Sparkles size={11} /> Full AI Report
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={ev => { ev.stopPropagation(); setShowAiModal(true); }}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 8, padding: '6px 12px', color: '#6366f1', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+                  >
+                    <Sparkles size={11} /> Full AI Report
+                  </button>
+                  {e.ai_sentiment && (
+                    <span style={{ fontSize: 10, color: 'var(--text-3)' }}>
+                      News: <span style={{ fontWeight: 600, color: e.ai_news_sentiment === 'POSITIVE' ? '#10b981' : e.ai_news_sentiment === 'NEGATIVE' ? '#ef4444' : '#f59e0b' }}>{e.ai_news_sentiment || '—'}</span>
+                    </span>
+                  )}
+                  {e.ai_model && <span style={{ fontSize: 10, color: 'var(--text-3)' }}>{e.ai_model}</span>}
+                </div>
+              )}
+              {!hasAi && (
+                <div style={{ marginTop: 12, fontSize: 12, color: 'var(--text-3)', fontStyle: 'italic' }}>
+                  AI analysis pending — use Settings → Earnings AI → Run Now
+                </div>
               )}
             </motion.div>
           )}
