@@ -72,6 +72,21 @@ router.post('/refresh', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// AI diagnostic test — single stock, returns raw error/result
+router.get('/ai-test', async (req, res) => {
+  try {
+    const { analyzeEarning, GEMINI_MODEL } = require('../services/geminiEarnings');
+    const ticker = (req.query.ticker || 'AAPL').toUpperCase();
+    const keyExists = !!process.env.GEMINI_API_KEY;
+    const keyLen = process.env.GEMINI_API_KEY?.length || 0;
+    const result = await analyzeEarning({
+      ticker, company: ticker + ' Corp', reportDate: new Date().toISOString().split('T')[0],
+      epsEstimate: 1.50, fiscalQuarter: 'Q1 2026', beatRateLast4: 3, avgSurprisePct: 2.0,
+    });
+    res.json({ keyExists, keyLen, model: GEMINI_MODEL, result });
+  } catch (e) { res.status(500).json({ error: e.message, stack: e.stack?.slice(0, 300) }); }
+});
+
 // AI routes
 router.get('/ai-status', async (req, res) => {
   try {
