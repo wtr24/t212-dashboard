@@ -28,15 +28,20 @@ router.get('/', async (req, res) => {
     const positions = portfolioResult.data?.length ? portfolioResult.data : DEMO_POSITIONS;
     const enriched = await enrichPositions(positions).catch(() => positions);
     const analysis = await analyseTop10(positions, Array.isArray(enriched) ? enriched : positions);
-    const result = positions.slice(0, 10).map((pos, i) => ({
-      ticker: pos.ticker,
-      fullName: pos.fullName || pos.ticker,
-      currentPrice: pos.currentPrice,
-      averagePrice: pos.averagePrice,
-      ppl: pos.ppl,
-      quantity: pos.quantity,
-      ...analysis[i],
-    }));
+    const result = positions.slice(0, 10).map(pos => {
+      const a = analysis.find(a => a.ticker === pos.ticker) || {};
+      const name = pos.companyName || pos.fullName || pos.ticker;
+      return {
+        ticker: pos.ticker,
+        companyName: name,
+        fullName: name,
+        currentPrice: pos.currentPrice,
+        averagePrice: pos.averagePrice,
+        ppl: pos.ppl,
+        quantity: pos.quantity,
+        ...a,
+      };
+    });
     await cache.setEx('ai:last_run', 86400, Date.now().toString()).catch(() => {});
     res.json(result);
   } catch (e) {

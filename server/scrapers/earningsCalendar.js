@@ -6,6 +6,75 @@ const cache = require('../services/cache');
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+function parseEps(str) {
+  if (!str || str === 'N/A') return null;
+  const n = parseFloat(String(str).replace(/[$,]/g, ''));
+  return isFinite(n) ? n : null;
+}
+
+function parseMarketCap(str) {
+  if (!str || str === 'N/A') return null;
+  const s = String(str).replace(/[$,]/g, '').toUpperCase();
+  const n = parseFloat(s);
+  if (s.endsWith('T')) return Math.round(n * 1e12);
+  if (s.endsWith('B')) return Math.round(n * 1e9);
+  if (s.endsWith('M')) return Math.round(n * 1e6);
+  return Math.round(n);
+}
+
+function nasdaqTimeToCode(t) {
+  if (!t || t === 'time-not-supplied') return 'TNS';
+  const tl = t.toLowerCase();
+  if (tl.includes('pre') || tl.includes('before') || tl.includes('bmo')) return 'BMO';
+  if (tl.includes('after') || tl.includes('post') || tl.includes('amc')) return 'AMC';
+  return 'TNS';
+}
+
+async function fetchNasdaqEarnings(dateStr) {
+  try {
+    const res = await axios.get('https://api.nasdaq.com/api/calendar/earnings', {
+      params: { date: dateStr },
+      headers: { 'User-Agent': UA, Accept: 'application/json,text/plain,*/*', Referer: 'https://www.nasdaq.com/' },
+      timeout: 15000,
+    });
+    return res.data?.data?.rows || [];
+  } catch (e) {
+    console.error(`[earnings nasdaq] ${dateStr}: ${e.message}`);
+    return [];
+  }
+}
+
+async function scrapeNasdaqWeek() {
+  const today = new Date();
+  let total = 0;
+  for (let d = 0; d <= 7; d++) {
+    const dt = new Date(today);
+    dt.setDate(today.getDate() + d);
+    if (dt.getDay() === 0 || dt.getDay() === 6) continue;
+    const dateStr = dt.toISOString().split('T')[0];
+    const rows = await fetchNasdaqEarnings(dateStr);
+    for (const row of rows) {
+      if (!row.symbol || row.symbol === 'N/A') continue;
+      const ticker = String(row.symbol).toUpperCase().trim();
+      await upsertEarning({
+        ticker,
+        company: row.name || ticker,
+        report_date: dateStr,
+        report_time: nasdaqTimeToCode(row.time),
+        fiscal_quarter: row.fiscalQuarterEnding || null,
+        eps_estimate: parseEps(row.epsForecast),
+        analyst_count: row.noOfEsts ? parseInt(row.noOfEsts) : null,
+        status: 'upcoming',
+        source: 'nasdaq',
+      }).catch(() => {});
+      total++;
+    }
+    if (d < 7) await sleep(500);
+  }
+  console.log(`[earnings nasdaq] Saved ${total} upcoming earnings`);
+  return total;
+}
+
 async function fetchYahooEarnings(ticker) {
   try {
     const res = await axios.get(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}`, {
@@ -136,9 +205,12 @@ async function runEarningsScraper() {
   if (lock) return { skipped: true };
   await cache.setEx('earnings:scraping', 600, '1').catch(() => {});
   try {
-    const tickers = await getTickersToScrape();
-    console.log(`[earnings] Scraping ${tickers.length} tickers`);
     let total = 0;
+    const nasdaqCount = await scrapeNasdaqWeek().catch(e => { console.error('[earnings] NASDAQ failed:', e.message); return 0; });
+    total += nasdaqCount;
+
+    const tickers = await getTickersToScrape();
+    console.log(`[earnings] Yahoo scraping ${tickers.length} tickers for history`);
     for (let i = 0; i < tickers.length; i += 5) {
       const batch = tickers.slice(i, i + 5);
       const results = await Promise.allSettled(batch.map(({ ticker, company }) => processTicker(ticker, company)));
@@ -146,7 +218,7 @@ async function runEarningsScraper() {
       if (i + 5 < tickers.length) await sleep(1200);
     }
     await seedIfEmpty();
-    console.log(`[earnings] Saved ${total} records`);
+    console.log(`[earnings] Total saved: ${total}`);
     return { count: total };
   } finally {
     await cache.del('earnings:scraping').catch(() => {});

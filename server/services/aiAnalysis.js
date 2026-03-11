@@ -84,7 +84,7 @@ Respond with exactly this JSON:
 outlook: BULLISH or BEARISH or NEUTRAL
 signal: STRONG BUY or BUY or HOLD or SELL or STRONG SELL
 confidence: 0-100
-targetPrice: 12-month price target as number
+targetPrice: absolute stock price in same currency as current price (e.g. if current is 45.00 target might be 52.00). NOT a percentage. NOT a % change. A real price number close to current price. If unsure respond null.
 riskLevel: LOW or MEDIUM or HIGH`;
 
       const { data } = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
@@ -102,6 +102,12 @@ riskLevel: LOW or MEDIUM or HIGH`;
       if (text) {
         try {
           const parsed = JSON.parse(text);
+          if (parsed.targetPrice != null) {
+            const cp = pos.currentPrice || 1;
+            if (parsed.targetPrice > cp * 4 || parsed.targetPrice < cp * 0.1 || !isFinite(parsed.targetPrice)) {
+              parsed.targetPrice = null;
+            }
+          }
           result = { ...parsed, source: 'groq' };
         } catch {
           const match = text.match(/\{[\s\S]*\}/);

@@ -63,7 +63,8 @@ async function toRedis(key, ttl, data) {
 
 async function savePositionsToDB(positions) {
   for (const p of positions) {
-    const value = (p.currentPrice || 0) * (p.quantity || 0);
+    const effectivePrice = (p.currentPrice || 0) > 0 ? p.currentPrice : (p.averagePrice || 0);
+    const value = effectivePrice * (p.quantity || 0);
     const pnlPct = p.averagePrice > 0 ? ((p.currentPrice - p.averagePrice) / p.averagePrice) * 100 : 0;
     await query(
       `INSERT INTO positions (ticker, quantity, avg_price, current_price, pnl, pnl_pct, market_value, raw_data, updated_at)

@@ -64,7 +64,7 @@ export default function Dashboard() {
 
   return (
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-      <DataBanner source={summary.data?.meta?.portfolioSource} age={summary.data?.meta?.portfolioAge} onRefresh={() => { summary.refetch(); positions.refetch(); }} />
+      <DataBanner source={summary.data?.meta?.source} age={summary.data?.meta?.age} onRefresh={() => { summary.refetch(); positions.refetch(); }} />
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
         style={{ marginBottom: 32, padding: '28px 32px', background: 'linear-gradient(135deg, rgba(59,130,246,0.06) 0%, rgba(139,92,246,0.06) 100%)', border: '1px solid rgba(59,130,246,0.15)', borderRadius: 20, position: 'relative', overflow: 'hidden' }}>
@@ -95,10 +95,10 @@ export default function Dashboard() {
         {summary.loading
           ? [0,1,2,3,4].map(i => <SkeletonMetric key={i} />)
           : <>
-            <StatCard label="Total Return" value={s.totalPnl} change={s.returnPct} icon={TrendingUp} delay={0.05} />
-            <StatCard label="Daily P&L" value={s.cash?.result} icon={Activity} delay={0.1} iconColor="#8b5cf6" />
-            <StatCard label="Free Cash" value={s.cash?.free} icon={Wallet} delay={0.15} iconColor="#3b82f6" />
-            <StatCard label="Invested" value={s.cash?.invested} icon={PiggyBank} delay={0.2} iconColor="#8b5cf6" />
+            <StatCard label="Total Return" value={s.unrealizedPnl} change={s.returnPct} icon={TrendingUp} delay={0.05} />
+            <StatCard label="Realised P&L" value={s.realizedPnl} icon={Activity} delay={0.1} iconColor="#8b5cf6" />
+            <StatCard label="Free Cash" value={s.availableCash} icon={Wallet} delay={0.15} iconColor="#3b82f6" />
+            <StatCard label="Invested" value={s.totalCost} icon={PiggyBank} delay={0.2} iconColor="#8b5cf6" />
             <StatCard label="Return %" value={s.returnPct} prefix="" suffix="%" icon={DollarSign} delay={0.25} />
           </>
         }

@@ -45,7 +45,7 @@ export default function Positions() {
     ticker: cleanTicker(p.ticker) || p.ticker,
     companyName: p.companyName || COMPANY_MAP[cleanTicker(p.ticker)] || cleanTicker(p.ticker),
     sector: SECTOR_MAP[cleanTicker(p.ticker)] || null,
-    value: (p.currentPrice || 0) * (p.quantity || 0),
+    value: ((p.currentPrice || 0) > 0 ? p.currentPrice : (p.averagePrice || 0)) * (p.quantity || 0),
     pplPct: (p.averagePrice || 0) > 0 ? ((p.ppl || 0) / ((p.averagePrice || 1) * (p.quantity || 1))) * 100 : 0,
   })), [rawPositions]);
 

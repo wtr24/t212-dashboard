@@ -66,7 +66,7 @@ function AnalysisCard({ item, index }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
               <div style={{ fontFamily: 'JetBrains Mono', fontWeight: 700, fontSize: 15, color: '#f1f5f9' }}>{ticker}</div>
-              <div style={{ fontSize: 11, color: '#475569', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 130 }}>{item.fullName || ticker}</div>
+              <div style={{ fontSize: 11, color: '#475569', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 130 }}>{item.companyName || item.fullName || ticker}</div>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5 }}>
               <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 20, background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`, fontWeight: 700, letterSpacing: '0.03em', whiteSpace: 'nowrap', boxShadow: `0 0 12px ${cfg.glow}` }}>{sig}</span>
