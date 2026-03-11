@@ -114,13 +114,13 @@ router.get('/ai-test', async (req, res) => {
 
     res.json({
       keyLen,
-      models_v1beta: { status: listV1beta.status, names: parseNames(listV1beta) },
-      models_v1: { status: listV1.status, names: parseNames(listV1) },
+      models_v1beta: { status: listV1beta.status, raw: listV1beta.body.slice(0, 400), names: parseNames(listV1beta) },
+      models_v1: { status: listV1.status, raw: listV1.body.slice(0, 200) },
       tests: {
-        'v1beta/gemini-1.5-flash': { status: flash15.status, body: flash15.body.slice(0, 100) },
-        'v1/gemini-1.5-flash': { status: flash15v1.status, body: flash15v1.body.slice(0, 100) },
-        'v1beta/gemini-1.5-flash-latest': { status: flashLite.status, body: flashLite.body.slice(0, 100) },
-        'v1beta/gemini-pro': { status: geminiPro.status, body: geminiPro.body.slice(0, 100) },
+        'v1beta/gemini-1.5-flash': { status: flash15.status, body: flash15.body.slice(0, 150) },
+        'v1/gemini-1.5-flash': { status: flash15v1.status, body: flash15v1.body.slice(0, 150) },
+        'v1beta/gemini-1.5-flash-latest': { status: flashLite.status, body: flashLite.body.slice(0, 150) },
+        'v1beta/gemini-pro': { status: geminiPro.status, body: geminiPro.body.slice(0, 150) },
       },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
