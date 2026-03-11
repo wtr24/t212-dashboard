@@ -212,6 +212,48 @@ async function initDB() {
       UNIQUE(ticker, analyst_firm, target_date)
     );
     CREATE INDEX IF NOT EXISTS idx_analyst_ticker ON earnings_analyst_targets(ticker);
+
+    CREATE TABLE IF NOT EXISTS earnings_ai_news (
+      id SERIAL PRIMARY KEY,
+      ticker VARCHAR(20),
+      headline TEXT,
+      source VARCHAR(100),
+      sentiment VARCHAR(20),
+      published_at TIMESTAMP,
+      url TEXT,
+      relevance_score INT,
+      earnings_date DATE,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_earnings_news_ticker ON earnings_ai_news(ticker, earnings_date);
+
+    CREATE TABLE IF NOT EXISTS app_settings (
+      key VARCHAR(100) PRIMARY KEY,
+      value TEXT,
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+
+  await pool.query(`
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS ai_signal VARCHAR(20);
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS ai_confidence INT;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS ai_beat_probability INT;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS ai_summary TEXT;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS ai_sentiment VARCHAR(20);
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS ai_news_sentiment VARCHAR(20);
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS ai_analyst_trend VARCHAR(20);
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS ai_key_factors JSONB;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS ai_risks JSONB;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS ai_generated_at TIMESTAMP;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS ai_model VARCHAR(50);
+    CREATE INDEX IF NOT EXISTS idx_earnings_ai_generated ON earnings_calendar(ai_generated_at);
+
+    INSERT INTO app_settings (key, value) VALUES
+      ('earnings_ai_run_time', '07:00'),
+      ('earnings_ai_enabled', 'true'),
+      ('earnings_ai_last_run', NULL),
+      ('earnings_ai_last_run_count', '0')
+    ON CONFLICT (key) DO NOTHING;
   `);
 
   await pool.query(`

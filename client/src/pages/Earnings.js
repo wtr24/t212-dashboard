@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Calendar, RefreshCw, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Loader } from 'lucide-react';
+import { Calendar, RefreshCw, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Loader, Sparkles, X } from 'lucide-react';
 import { StockLogo } from '../utils/stockLogo';
 
 const BASE = process.env.REACT_APP_API_URL || 'http://localhost:5002/api';
@@ -31,58 +31,251 @@ function TimeBadge({ time }) {
   );
 }
 
+function AiSignalBadge({ signal, confidence }) {
+  if (!signal) return (
+    <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-3)', background: 'var(--surface-2)', padding: '2px 7px', borderRadius: 5 }}>
+      AI Pending
+    </span>
+  );
+  const colors = { BUY: '#10b981', SELL: '#ef4444', HOLD: '#f59e0b' };
+  const c = colors[signal] || 'var(--text-3)';
+  return (
+    <span style={{ fontSize: 10, fontWeight: 700, color: c, background: `${c}18`, padding: '2px 7px', borderRadius: 5, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+      <Sparkles size={9} /> {signal} {confidence != null ? `${confidence}%` : ''}
+    </span>
+  );
+}
+
+function BeatBar({ probability }) {
+  if (probability == null) return null;
+  const pct = Math.min(100, Math.max(0, probability));
+  const color = pct >= 65 ? '#10b981' : pct >= 45 ? '#f59e0b' : '#ef4444';
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+        <span style={{ fontSize: 10, color: 'var(--text-3)' }}>Beat Probability</span>
+        <span style={{ fontSize: 10, fontWeight: 700, color, fontFamily: 'JetBrains Mono, monospace' }}>{pct}%</span>
+      </div>
+      <div style={{ height: 4, background: 'var(--surface-2)', borderRadius: 2, overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 2, transition: 'width 0.6s ease' }} />
+      </div>
+    </div>
+  );
+}
+
+function AiDetailModal({ ticker, onClose }) {
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${BASE}/earnings/${ticker}/ai-detail`)
+      .then(r => r.json())
+      .then(d => { setDetail(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [ticker]);
+
+  const e = detail?.earning;
+  const news = detail?.news || [];
+
+  const sentimentColor = s => s === 'POSITIVE' ? '#10b981' : s === 'NEGATIVE' ? '#ef4444' : '#f59e0b';
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }} onClick={onClose}>
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 20, padding: 28, width: '100%', maxWidth: 560, maxHeight: '85vh', overflowY: 'auto' }}
+        onClick={ev => ev.stopPropagation()}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <Sparkles size={18} color="#6366f1" />
+            <span style={{ fontWeight: 700, fontSize: 16 }}>AI Analysis — {ticker}</span>
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--text-3)', cursor: 'pointer' }}><X size={18} /></button>
+        </div>
+
+        {loading ? (
+          <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)' }}>
+            <Loader size={24} style={{ animation: 'spin 1s linear infinite', marginBottom: 8 }} />
+            <div>Loading AI analysis...</div>
+          </div>
+        ) : !e?.ai_signal ? (
+          <div style={{ textAlign: 'center', padding: 40, color: 'var(--text-3)' }}>
+            <Sparkles size={24} style={{ opacity: 0.3, marginBottom: 8 }} />
+            <div style={{ fontSize: 15, fontWeight: 600 }}>No AI analysis yet</div>
+            <div style={{ fontSize: 13, marginTop: 4 }}>Run from Settings → Earnings AI to generate predictions</div>
+          </div>
+        ) : (
+          <>
+            {/* Beat probability arc */}
+            <div style={{ textAlign: 'center', marginBottom: 20 }}>
+              <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'var(--surface-2)', borderRadius: 16, padding: '16px 32px' }}>
+                <div style={{ fontSize: 36, fontWeight: 800, fontFamily: 'JetBrains Mono, monospace', color: e.ai_beat_probability >= 65 ? '#10b981' : e.ai_beat_probability >= 45 ? '#f59e0b' : '#ef4444' }}>
+                  {e.ai_beat_probability}%
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 500 }}>Beat Probability</div>
+              </div>
+            </div>
+
+            {/* Signal row */}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
+              <AiSignalBadge signal={e.ai_signal} confidence={e.ai_confidence} />
+              {e.ai_sentiment && (
+                <span style={{ fontSize: 10, fontWeight: 600, color: sentimentColor(e.ai_sentiment), background: `${sentimentColor(e.ai_sentiment)}18`, padding: '2px 8px', borderRadius: 5 }}>
+                  {e.ai_sentiment}
+                </span>
+              )}
+              {e.ai_analyst_trend && (
+                <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-2)', background: 'var(--surface-2)', padding: '2px 8px', borderRadius: 5 }}>
+                  {e.ai_analyst_trend}
+                </span>
+              )}
+            </div>
+
+            {/* Summary */}
+            {e.ai_summary && (
+              <div style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.7, marginBottom: 16, padding: '12px 14px', background: 'var(--surface-2)', borderRadius: 10 }}>
+                {e.ai_summary}
+              </div>
+            )}
+
+            {/* Key factors */}
+            {e.ai_key_factors?.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 8 }}>Key Factors</div>
+                {e.ai_key_factors.map((f, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 5 }}>
+                    <span style={{ color: '#10b981', fontSize: 12, marginTop: 1, flexShrink: 0 }}>✓</span>
+                    <span style={{ fontSize: 13, color: 'var(--text)' }}>{f}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Risks */}
+            {e.ai_risks?.length > 0 && (
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 8 }}>Risks</div>
+                {e.ai_risks.map((r, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 5 }}>
+                    <span style={{ color: '#ef4444', fontSize: 12, marginTop: 1, flexShrink: 0 }}>!</span>
+                    <span style={{ fontSize: 13, color: 'var(--text)' }}>{r}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* News */}
+            {news.length > 0 && (
+              <div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 8 }}>News Sentiment</div>
+                {news.slice(0, 6).map((n, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 8, padding: '8px 10px', background: 'var(--surface-2)', borderRadius: 8 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: sentimentColor(n.sentiment), background: `${sentimentColor(n.sentiment)}18`, padding: '2px 6px', borderRadius: 4, flexShrink: 0, marginTop: 1 }}>
+                      {n.sentiment?.slice(0, 3) || '?'}
+                    </span>
+                    <div>
+                      <div style={{ fontSize: 12, color: 'var(--text)', lineHeight: 1.4 }}>{n.headline}</div>
+                      {n.source && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 2 }}>{n.source}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 16, textAlign: 'center' }}>
+              Generated by {e.ai_model || 'Gemini'} · {e.ai_generated_at ? new Date(e.ai_generated_at).toLocaleString() : 'unknown time'}
+            </div>
+          </>
+        )}
+      </motion.div>
+    </div>
+  );
+}
+
 function EarningsCard({ e, expanded, onToggle }) {
+  const [showAiModal, setShowAiModal] = useState(false);
   const reported = e.status === 'reported';
   const beat = reported && e.eps_surprise > 0.005;
   const miss = reported && e.eps_surprise < -0.005;
+  const hasAi = !!e.ai_signal;
+  const aiBuy = e.ai_signal === 'BUY';
+  const aiSell = e.ai_signal === 'SELL';
+
+  let borderColor = beat ? 'rgba(16,185,129,0.25)' : miss ? 'rgba(239,68,68,0.25)' : 'var(--border)';
+  if (!reported && aiBuy) borderColor = 'rgba(16,185,129,0.3)';
+  if (!reported && aiSell) borderColor = 'rgba(239,68,68,0.3)';
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      style={{ background: 'var(--surface)', border: `1px solid ${beat ? 'rgba(16,185,129,0.25)' : miss ? 'rgba(239,68,68,0.25)' : 'var(--border)'}`, borderRadius: 14, padding: 16, cursor: 'pointer', transition: 'border-color 0.2s' }}
-      onClick={onToggle}
-      whileHover={{ y: -1 }}
-    >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <StockLogo ticker={e.ticker} size="md" />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span style={{ fontWeight: 700, fontSize: 14 }}>{e.ticker}</span>
-            <TimeBadge time={e.report_time} />
-            {reported && <SurprisePill surprise={e.eps_surprise} surprisePct={e.eps_surprise_pct} />}
+    <>
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        style={{ background: 'var(--surface)', border: `1px solid ${borderColor}`, borderRadius: 14, padding: 16, cursor: 'pointer', transition: 'border-color 0.2s' }}
+        onClick={onToggle}
+        whileHover={{ y: -1 }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <StockLogo ticker={e.ticker} size="md" />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 700, fontSize: 14 }}>{e.ticker}</span>
+              <TimeBadge time={e.report_time} />
+              {reported && <SurprisePill surprise={e.eps_surprise} surprisePct={e.eps_surprise_pct} />}
+              <AiSignalBadge signal={e.ai_signal} confidence={e.ai_confidence} />
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.company || e.ticker}</div>
+            {hasAi && <BeatBar probability={e.ai_beat_probability} />}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.company || e.ticker}</div>
+          <div style={{ textAlign: 'right', flexShrink: 0 }}>
+            <div style={{ fontSize: 11, color: 'var(--text-3)' }}>EPS Est</div>
+            <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{fmtEps(e.eps_estimate)}</div>
+          </div>
+          {expanded ? <ChevronUp size={14} color="var(--text-3)" /> : <ChevronDown size={14} color="var(--text-3)" />}
         </div>
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontSize: 11, color: 'var(--text-3)' }}>EPS Est</div>
-          <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{fmtEps(e.eps_estimate)}</div>
-        </div>
-        {expanded ? <ChevronUp size={14} color="var(--text-3)" /> : <ChevronDown size={14} color="var(--text-3)" />}
-      </div>
+
+        <AnimatePresence>
+          {expanded && (
+            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ overflow: 'hidden' }}>
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '8px 16px' }}>
+                {[
+                  { label: 'EPS Estimate', value: fmtEps(e.eps_estimate) },
+                  { label: 'EPS Actual', value: reported ? fmtEps(e.eps_actual) : '—' },
+                  { label: 'Surprise', value: reported ? fmt2(e.eps_surprise) : '—' },
+                  { label: 'Quarter', value: e.fiscal_quarter || '—' },
+                  { label: 'Rev Estimate', value: e.revenue_estimate ? `$${(e.revenue_estimate/1e9).toFixed(1)}B` : '—' },
+                  { label: 'Rev Actual', value: e.revenue_actual ? `$${(e.revenue_actual/1e9).toFixed(1)}B` : '—' },
+                ].map(({ label, value }) => (
+                  <div key={label}>
+                    <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 }}>{label}</div>
+                    <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+              {hasAi && e.ai_summary && (
+                <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--surface-2)', borderRadius: 8, fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
+                  {e.ai_summary}
+                </div>
+              )}
+              {hasAi && (
+                <button
+                  onClick={ev => { ev.stopPropagation(); setShowAiModal(true); }}
+                  style={{ marginTop: 10, display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: 8, padding: '6px 12px', color: '#6366f1', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}
+                >
+                  <Sparkles size={11} /> Full AI Report
+                </button>
+              )}
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
 
       <AnimatePresence>
-        {expanded && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ overflow: 'hidden' }}>
-            <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '8px 16px' }}>
-              {[
-                { label: 'EPS Estimate', value: fmtEps(e.eps_estimate) },
-                { label: 'EPS Actual', value: reported ? fmtEps(e.eps_actual) : '—' },
-                { label: 'Surprise', value: reported ? fmt2(e.eps_surprise) : '—' },
-                { label: 'Quarter', value: e.fiscal_quarter || '—' },
-                { label: 'Rev Estimate', value: e.revenue_estimate ? `$${(e.revenue_estimate/1e9).toFixed(1)}B` : '—' },
-                { label: 'Rev Actual', value: e.revenue_actual ? `$${(e.revenue_actual/1e9).toFixed(1)}B` : '—' },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 }}>{label}</div>
-                  <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{value}</div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
-        )}
+        {showAiModal && <AiDetailModal ticker={e.ticker} onClose={() => setShowAiModal(false)} />}
       </AnimatePresence>
-    </motion.div>
+    </>
   );
 }
 
@@ -170,7 +363,7 @@ function HistoryView({ data }) {
       <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
         <thead>
           <tr>
-            {['Date','Company','Quarter','EPS Est','EPS Actual','Surprise','Rev Est','Status'].map(h => (
+            {['Date','Company','Quarter','EPS Est','EPS Actual','Surprise','Rev Est','AI Signal','Status'].map(h => (
               <th key={h} style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.7, padding: '10px 12px', background: 'var(--surface-2)', textAlign: 'left', whiteSpace: 'nowrap' }}>{h}</th>
             ))}
           </tr>
@@ -196,6 +389,7 @@ function HistoryView({ data }) {
                 <td style={{ padding: '10px 12px', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, borderBottom: '1px solid var(--border)', color: beat ? 'var(--gain)' : miss ? 'var(--loss)' : 'var(--text)' }}>{e.eps_actual != null ? fmtEps(e.eps_actual) : '—'}</td>
                 <td style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}><SurprisePill surprise={e.eps_surprise} surprisePct={e.eps_surprise_pct} /></td>
                 <td style={{ padding: '10px 12px', fontFamily: 'JetBrains Mono, monospace', fontSize: 12, color: 'var(--text-3)', borderBottom: '1px solid var(--border)' }}>{e.revenue_estimate ? `$${(e.revenue_estimate/1e9).toFixed(1)}B` : '—'}</td>
+                <td style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}><AiSignalBadge signal={e.ai_signal} confidence={e.ai_confidence} /></td>
                 <td style={{ padding: '10px 12px', borderBottom: '1px solid var(--border)' }}>
                   <span style={{ fontSize: 11, fontWeight: 600, color: e.status === 'reported' ? 'var(--gain)' : 'var(--text-3)', background: e.status === 'reported' ? 'rgba(16,185,129,0.1)' : 'var(--surface-2)', padding: '2px 8px', borderRadius: 5 }}>
                     {e.status}
@@ -216,18 +410,22 @@ export default function Earnings() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [scrapeStatus, setScrapeStatus] = useState(null);
+  const [aiStatus, setAiStatus] = useState(null);
   const [expanded, setExpanded] = useState(null);
 
   const fetchData = useCallback(async (view) => {
     setLoading(true);
     try {
-      const [res, statusRes] = await Promise.all([
+      const [res, statusRes, aiStatusRes] = await Promise.all([
         fetch(`${BASE}/earnings/${view === 'history' ? 'history' : view === 'month' ? 'month' : view === 'today' ? 'today' : 'week'}`),
         fetch(`${BASE}/earnings/scrape-status`),
+        fetch(`${BASE}/earnings/ai-status`),
       ]);
       const json = await res.json();
       const status = await statusRes.json().catch(() => null);
+      const aiSt = await aiStatusRes.json().catch(() => null);
       setScrapeStatus(status);
+      setAiStatus(aiSt);
       setData(prev => ({ ...prev, [view]: json }));
     } catch (e) {
       console.error('[earnings]', e);
@@ -264,8 +462,17 @@ export default function Earnings() {
             <Calendar size={20} color="#3b82f6" />
             <h2 style={{ fontSize: 22, fontWeight: 700, margin: 0 }}>Earnings Calendar</h2>
           </div>
-          <div style={{ fontSize: 13, color: 'var(--text-3)' }}>
-            {scrapeStatus ? `${scrapeStatus.total} earnings tracked · ${String(scrapeStatus.earliest || '').split('T')[0]} to ${String(scrapeStatus.latest || '').split('T')[0]}` : 'Loading status...'}
+          <div style={{ fontSize: 13, color: 'var(--text-3)', display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+            <span>{scrapeStatus ? `${scrapeStatus.total} earnings tracked` : 'Loading...'}</span>
+            {aiStatus && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Sparkles size={11} color="#6366f1" />
+                <span style={{ color: '#6366f1' }}>
+                  AI: {aiStatus.lastRun ? `Last ran ${aiStatus.lastRun}` : 'Not yet run'}
+                  {aiStatus.isRunning && ' (running...)'}
+                </span>
+              </span>
+            )}
           </div>
         </div>
         <button onClick={handleRefresh} disabled={refreshing} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 20, border: '1px solid rgba(59,130,246,0.4)', background: 'rgba(59,130,246,0.08)', color: '#3b82f6', fontSize: 13, fontWeight: 500, cursor: refreshing ? 'not-allowed' : 'pointer', opacity: refreshing ? 0.6 : 1 }}>

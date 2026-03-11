@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const svc = require('../services/earningsService');
 const cache = require('../services/cache');
+const { query } = require('../models/db');
 
 router.get('/today', async (req, res) => {
   try {
@@ -68,6 +69,63 @@ router.post('/refresh', async (req, res) => {
     await cache.del('earnings:week').catch(() => {});
     runEarningsScraper().catch(e => console.error('[earnings refresh]', e.message));
     res.json({ triggered: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// AI routes
+router.get('/ai-status', async (req, res) => {
+  try {
+    const { getIsRunning } = require('../jobs/earningsAiJob');
+    const r = await query(
+      `SELECT key, value FROM app_settings WHERE key IN ('earnings_ai_last_run','earnings_ai_last_run_count','earnings_ai_run_time','earnings_ai_enabled')`
+    ).catch(() => ({ rows: [] }));
+    const settings = {};
+    for (const row of r.rows) settings[row.key] = row.value;
+    res.json({
+      isRunning: getIsRunning(),
+      lastRun: settings.earnings_ai_last_run || null,
+      lastRunCount: parseInt(settings.earnings_ai_last_run_count) || 0,
+      runTime: settings.earnings_ai_run_time || '07:00',
+      enabled: settings.earnings_ai_enabled !== 'false',
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/ai-run', async (req, res) => {
+  try {
+    const { runEarningsAiAnalysis, getIsRunning } = require('../jobs/earningsAiJob');
+    if (getIsRunning()) return res.json({ triggered: false, reason: 'already_running' });
+    runEarningsAiAnalysis(true).catch(e => console.error('[earnings ai-run]', e.message));
+    res.json({ triggered: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/today-with-ai', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT * FROM earnings_calendar
+       WHERE report_date = CURRENT_DATE
+       ORDER BY ai_confidence DESC NULLS LAST, ticker ASC`
+    ).catch(() => ({ rows: [] }));
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/:ticker/ai-detail', async (req, res) => {
+  try {
+    const ticker = req.params.ticker.toUpperCase();
+    const [earningRes, newsRes] = await Promise.all([
+      query(
+        `SELECT * FROM earnings_calendar WHERE ticker=$1 ORDER BY report_date DESC LIMIT 1`,
+        [ticker]
+      ).catch(() => ({ rows: [] })),
+      query(
+        `SELECT * FROM earnings_ai_news WHERE ticker=$1 ORDER BY created_at DESC LIMIT 20`,
+        [ticker]
+      ).catch(() => ({ rows: [] })),
+    ]);
+    if (!earningRes.rows.length) return res.status(404).json({ error: 'Not found' });
+    res.json({ earning: earningRes.rows[0], news: newsRes.rows });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
