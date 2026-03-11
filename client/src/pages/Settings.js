@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
-import { CheckCircle, XCircle, RefreshCw, Eye, EyeOff, Sparkles, ChevronDown, ChevronUp, Loader, Play } from 'lucide-react';
+import { CheckCircle, XCircle, RefreshCw, Eye, EyeOff, Sparkles, ChevronDown, ChevronUp, Loader, Play, Bell, Send } from 'lucide-react';
 
 const BASE = process.env.REACT_APP_API_URL || 'http://localhost:5002/api';
 
@@ -242,6 +242,109 @@ function EarningsAiSection() {
   );
 }
 
+function DiscordEarningsSection() {
+  const [sendTime, setSendTime] = useState('07:00');
+  const [enabled, setEnabled] = useState(true);
+  const [testStatus, setTestStatus] = useState(null);
+  const [sendStatus, setSendStatus] = useState(null);
+  const [lastSent, setLastSent] = useState(null);
+
+  useEffect(() => {
+    fetch(`${BASE}/settings`)
+      .then(r => r.json())
+      .then(s => {
+        if (s.earnings_discord_time) setSendTime(s.earnings_discord_time);
+        if (s.earnings_discord_enabled != null) setEnabled(s.earnings_discord_enabled !== 'false');
+        if (s.discord_earnings_last_sent) setLastSent(s.discord_earnings_last_sent);
+      })
+      .catch(() => {});
+  }, []);
+
+  const saveSettings = async () => {
+    await fetch(`${BASE}/settings`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ earnings_discord_time: sendTime, earnings_discord_enabled: String(enabled) }),
+    }).catch(() => {});
+  };
+
+  const sendTest = async () => {
+    setTestStatus('loading');
+    try {
+      const r = await fetch(`${BASE}/earnings/discord-test`, { method: 'POST' });
+      const j = await r.json();
+      setTestStatus(j.success ? 'ok' : 'err');
+    } catch { setTestStatus('err'); }
+    setTimeout(() => setTestStatus(null), 4000);
+  };
+
+  const sendNow = async () => {
+    setSendStatus('loading');
+    try {
+      const r = await fetch(`${BASE}/earnings/discord-send`, { method: 'POST' });
+      const j = await r.json();
+      setSendStatus(j.started ? 'ok' : 'err');
+    } catch { setSendStatus('err'); }
+    setTimeout(() => setSendStatus(null), 5000);
+  };
+
+  return (
+    <motion.div className="card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} style={{ padding: 24, gridColumn: '1 / -1' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+        <Bell size={18} color="#5865f2" />
+        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Discord Earnings Alerts</div>
+        <span style={{ fontSize: 11, color: '#5865f2', background: 'rgba(88,101,242,0.12)', padding: '2px 8px', borderRadius: 5, fontWeight: 600 }}>Daily 7am</span>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+        <button onClick={sendTest} style={{ display: 'flex', alignItems: 'center', gap: 6, background: testStatus === 'ok' ? 'rgba(16,185,129,0.1)' : 'rgba(88,101,242,0.1)', border: `1px solid ${testStatus === 'ok' ? 'rgba(16,185,129,0.3)' : 'rgba(88,101,242,0.3)'}`, borderRadius: 10, padding: '8px 16px', color: testStatus === 'ok' ? '#10b981' : testStatus === 'err' ? '#ef4444' : '#5865f2', fontSize: 13, fontWeight: 500, cursor: 'pointer' }}>
+          {testStatus === 'loading' ? <Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> : testStatus === 'ok' ? <CheckCircle size={13} /> : testStatus === 'err' ? <XCircle size={13} /> : <Send size={13} />}
+          {testStatus === 'ok' ? 'Test Sent!' : testStatus === 'err' ? 'Failed — check webhook' : 'Send Test Embed'}
+        </button>
+
+        <button onClick={sendNow} style={{ display: 'flex', alignItems: 'center', gap: 6, background: sendStatus === 'ok' ? 'rgba(16,185,129,0.1)' : 'var(--surface-2)', border: `1px solid ${sendStatus === 'ok' ? 'rgba(16,185,129,0.3)' : 'var(--border)'}`, borderRadius: 10, padding: '8px 16px', color: sendStatus === 'ok' ? '#10b981' : sendStatus === 'loading' ? 'var(--text-3)' : 'var(--text)', fontSize: 13, fontWeight: 500, cursor: sendStatus === 'loading' ? 'not-allowed' : 'pointer' }}>
+          {sendStatus === 'loading' ? <Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> : sendStatus === 'ok' ? <CheckCircle size={13} /> : <Bell size={13} />}
+          {sendStatus === 'ok' ? 'Sent! Check #earnings' : sendStatus === 'loading' ? 'Sending...' : "Send Today's Earnings Now"}
+        </button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 16, marginBottom: 20 }}>
+        <div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Daily Send Time (London)</div>
+          <input type="time" value={sendTime} onChange={e => setSendTime(e.target.value)}
+            style={{ width: '100%', background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 10, padding: '10px 14px', color: 'var(--text)', fontSize: 13, outline: 'none', fontFamily: 'JetBrains Mono, monospace', boxSizing: 'border-box' }} />
+          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 6 }}>Runs Mon–Fri only · set AI to 06:30 for best results</div>
+        </div>
+
+        <div>
+          <div style={{ fontSize: 12, color: 'var(--text-3)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Enable Alerts</div>
+          <button onClick={() => setEnabled(e => !e)}
+            style={{ display: 'flex', alignItems: 'center', gap: 10, background: enabled ? 'rgba(88,101,242,0.1)' : 'var(--surface-2)', border: `1px solid ${enabled ? 'rgba(88,101,242,0.3)' : 'var(--border)'}`, borderRadius: 10, padding: '10px 16px', cursor: 'pointer', color: enabled ? '#5865f2' : 'var(--text-3)', fontSize: 13, fontWeight: 600, width: '100%', transition: 'all 0.2s' }}>
+            <div style={{ width: 32, height: 18, borderRadius: 9, background: enabled ? '#5865f2' : 'var(--border)', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+              <div style={{ position: 'absolute', top: 2, left: enabled ? 16 : 2, width: 14, height: 14, borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
+            </div>
+            {enabled ? 'Enabled' : 'Disabled'}
+          </button>
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10 }}>
+        <button onClick={saveSettings} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(88,101,242,0.1)', border: '1px solid rgba(88,101,242,0.3)', borderRadius: 10, padding: '8px 16px', color: '#5865f2', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+          Save Discord Settings
+        </button>
+      </div>
+
+      <div style={{ marginTop: 16, fontSize: 12, color: 'var(--text-3)', lineHeight: 1.8, padding: '10px 14px', background: 'var(--surface-2)', borderRadius: 10 }}>
+        Sends rich embed cards to Discord each morning: summary header → ⭐ your portfolio stocks → 🌅 BMO batch → 🌆 AMC batch.<br />
+        Each card shows: ticker logo, BUY/SELL/HOLD signal, beat probability bar, AI summary, key catalysts &amp; risks.
+        {lastSent && <span style={{ marginLeft: 8, color: 'var(--text-3)' }}>· Last sent: {new Date(lastSent).toLocaleString()}</span>}
+      </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </motion.div>
+  );
+}
+
 export default function Settings() {
   return (
     <div>
@@ -270,6 +373,7 @@ export default function Settings() {
         </motion.div>
 
         <EarningsAiSection />
+        <DiscordEarningsSection />
       </div>
 
       <motion.div className="card" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} style={{ padding: 24 }}>

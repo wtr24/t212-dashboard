@@ -252,7 +252,10 @@ async function initDB() {
       ('earnings_ai_run_time', '07:00'),
       ('earnings_ai_enabled', 'true'),
       ('earnings_ai_last_run', NULL),
-      ('earnings_ai_last_run_count', '0')
+      ('earnings_ai_last_run_count', '0'),
+      ('earnings_discord_time', '07:00'),
+      ('earnings_discord_enabled', 'true'),
+      ('discord_earnings_last_sent', NULL)
     ON CONFLICT (key) DO NOTHING;
 
     CREATE TABLE IF NOT EXISTS gemini_usage (

@@ -157,6 +157,41 @@ router.get('/:ticker/ai-detail', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Discord webhook routes
+router.post('/discord-send', async (req, res) => {
+  try {
+    const { runEarningsDiscordJob } = require('../jobs/earningsDiscordJob');
+    runEarningsDiscordJob().catch(e => console.error('[discord-send]', e.message));
+    const countRes = await query(
+      `SELECT COUNT(*) as n FROM earnings_calendar WHERE report_date = CURRENT_DATE`
+    ).catch(() => ({ rows: [{ n: 0 }] }));
+    const count = parseInt(countRes.rows[0]?.n) || 0;
+    res.json({ started: true, count, message: `Sending ${count} earnings to Discord` });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/discord-test', async (req, res) => {
+  try {
+    const { buildSingleEarningEmbed, buildDailySummaryEmbed, postToWebhook } = require('../services/discordEarnings');
+    const testEarning = {
+      ticker: 'NVDA', company: 'NVIDIA Corporation',
+      report_time: 'Pre-Mkt', fiscal_quarter: 'Q4 2026',
+      eps_estimate: 5.57, revenue_estimate: 39000000000,
+      ai_signal: 'BUY', ai_confidence: 87, ai_beat_probability: 82,
+      ai_sentiment: 'POSITIVE', ai_generated_at: new Date(),
+      ai_summary: 'Strong data center demand expected to drive another beat. Blackwell GPU supply constraints easing into Q4, with margin expansion likely.',
+      ai_key_factors: ['Data center revenue accelerating', 'Blackwell ramp ahead of schedule', 'Margin expansion expected'],
+      ai_risks: ['Valuation stretched at current levels', 'China export restrictions'],
+      in_portfolio: true,
+    };
+    await postToWebhook({
+      content: '🧪 **Test embed from T212 Dashboard**',
+      embeds: [buildSingleEarningEmbed(testEarning)],
+    });
+    res.json({ success: true, message: 'Test embed sent to Discord' });
+  } catch (e) { res.status(500).json({ error: e.message, success: false }); }
+});
+
 router.get('/:ticker', async (req, res) => {
   try {
     const data = await svc.getHistoricalEarnings(req.params.ticker);

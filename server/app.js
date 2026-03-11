@@ -92,6 +92,10 @@ initDB().then(async () => {
     const { scheduleEarningsAiJob } = require('./jobs/earningsAiJob');
     scheduleEarningsAiJob().catch(e => console.error('[earnings ai] Schedule failed:', e.message));
   }, 25000);
+  setTimeout(async () => {
+    const { scheduleEarningsDiscordJob } = require('./jobs/earningsDiscordJob');
+    scheduleEarningsDiscordJob().catch(e => console.error('[discord earnings] Schedule failed:', e.message));
+  }, 28000);
 }).catch(err => {
   console.error('DB init failed:', err.message);
   app.listen(PORT, () => console.log(`Server running on port ${PORT} (no DB)`));
