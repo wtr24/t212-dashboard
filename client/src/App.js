@@ -11,6 +11,7 @@ import Dividends from './pages/Dividends';
 import Settings from './pages/Settings';
 import CongressTracker from './pages/CongressTracker';
 import InsiderTracker from './pages/InsiderTracker';
+import Earnings from './pages/Earnings';
 
 function NotFound() {
   return (
@@ -37,6 +38,7 @@ function AnimatedRoutes() {
           <Route path="/signals" element={<Navigate to="/predictions" replace />} />
           <Route path="/congress" element={<CongressTracker />} />
           <Route path="/insider" element={<InsiderTracker />} />
+          <Route path="/earnings" element={<Earnings />} />
           <Route path="/history" element={<History />} />
           <Route path="/dividends" element={<Dividends />} />
           <Route path="/settings" element={<Settings />} />

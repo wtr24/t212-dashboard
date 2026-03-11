@@ -171,6 +171,47 @@ async function initDB() {
     );
     CREATE INDEX IF NOT EXISTS idx_sp500_ticker ON sp500_stocks(ticker);
     CREATE INDEX IF NOT EXISTS idx_sp500_sector ON sp500_stocks(sector);
+
+    CREATE TABLE IF NOT EXISTS earnings_calendar (
+      id SERIAL PRIMARY KEY,
+      ticker VARCHAR(20) NOT NULL,
+      company VARCHAR(200),
+      report_date DATE NOT NULL,
+      report_time VARCHAR(10) DEFAULT 'TNS',
+      fiscal_quarter VARCHAR(10),
+      fiscal_year INT,
+      eps_estimate DECIMAL,
+      eps_actual DECIMAL,
+      eps_surprise DECIMAL,
+      eps_surprise_pct DECIMAL,
+      revenue_estimate BIGINT,
+      revenue_actual BIGINT,
+      revenue_surprise_pct DECIMAL,
+      guidance_eps_low DECIMAL,
+      guidance_eps_high DECIMAL,
+      analyst_count INT,
+      status VARCHAR(20) DEFAULT 'upcoming',
+      source VARCHAR(50),
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(ticker, report_date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_earnings_date ON earnings_calendar(report_date);
+    CREATE INDEX IF NOT EXISTS idx_earnings_ticker ON earnings_calendar(ticker);
+    CREATE INDEX IF NOT EXISTS idx_earnings_status ON earnings_calendar(status);
+
+    CREATE TABLE IF NOT EXISTS earnings_analyst_targets (
+      id SERIAL PRIMARY KEY,
+      ticker VARCHAR(20) NOT NULL,
+      analyst_firm VARCHAR(100),
+      rating VARCHAR(20),
+      price_target DECIMAL,
+      previous_target DECIMAL,
+      target_date DATE,
+      created_at TIMESTAMP DEFAULT NOW(),
+      UNIQUE(ticker, analyst_firm, target_date)
+    );
+    CREATE INDEX IF NOT EXISTS idx_analyst_ticker ON earnings_analyst_targets(ticker);
   `);
 
   await pool.query(`

@@ -4,6 +4,36 @@ const { query } = require('../models/db');
 
 const BASE = 'https://live.trading212.com/api/v0';
 
+const COMPANY_MAP = {
+  PLTR:'Palantir Technologies',NVDA:'NVIDIA Corporation',AAPL:'Apple Inc.',
+  MSFT:'Microsoft Corporation',TSLA:'Tesla Inc.',META:'Meta Platforms',
+  GOOGL:'Alphabet Inc.',AMZN:'Amazon.com Inc.',JPM:'JPMorgan Chase',
+  BRK:'Berkshire Hathaway',JNJ:'Johnson & Johnson',V:'Visa Inc.',
+  WMT:'Walmart Inc.',XOM:'ExxonMobil',UNH:'UnitedHealth Group',
+  PG:'Procter & Gamble',MA:'Mastercard Inc.',HD:'Home Depot',
+  COST:'Costco Wholesale',AVGO:'Broadcom Inc.',LLY:'Eli Lilly',
+  ABBV:'AbbVie Inc.',CRM:'Salesforce Inc.',NFLX:'Netflix Inc.',
+  AMD:'Advanced Micro Devices',INTC:'Intel Corporation',QCOM:'Qualcomm',
+  ORCL:'Oracle Corporation',IBM:'IBM Corporation',ADBE:'Adobe Inc.',
+  NOW:'ServiceNow',MU:'Micron Technology',PANW:'Palo Alto Networks',
+  CRWD:'CrowdStrike Holdings',SNOW:'Snowflake Inc.',NET:'Cloudflare',
+  ASML:'ASML Holding',TSM:'Taiwan Semiconductor',SMCI:'Super Micro Computer',
+  BP:'BP p.l.c.',SHEL:'Shell p.l.c.',HSBA:'HSBC Holdings',VOD:'Vodafone Group',
+  GSK:'GSK p.l.c.',AZN:'AstraZeneca',RIO:'Rio Tinto',BHP:'BHP Group',
+  ARM:'Arm Holdings',HOOD:'Robinhood Markets',COIN:'Coinbase Global',
+  MSTR:'MicroStrategy',SOUN:'SoundHound AI',IONQ:'IonQ Inc.',
+};
+
+function cleanTicker(raw) {
+  if (!raw) return raw;
+  const clean = raw.replace(/[_](US|UK|EQ|NASDAQ|NYSE|LSE|ALL|EQ)[_A-Z0-9]*/g, '');
+  return clean || raw.split('_')[0];
+}
+
+function getCompanyName(ticker) {
+  return COMPANY_MAP[ticker] || null;
+}
+
 function buildAuth() {
   const key = process.env.T212_API_KEY;
   const secret = process.env.T212_API_SECRET;
@@ -57,7 +87,14 @@ async function saveAccountToDB(summary) {
 async function getPositionsFromDB() {
   try {
     const r = await query('SELECT raw_data, updated_at FROM positions ORDER BY market_value DESC');
-    if (r.rows.length) return { positions: r.rows.map(r => r.raw_data), age: r.rows[0].updated_at };
+    if (r.rows.length) return {
+      positions: r.rows.map(row => {
+        const p = row.raw_data;
+        const ct = cleanTicker(p.ticker);
+        return { ...p, ticker: ct, rawTicker: p.ticker, companyName: p.companyName || getCompanyName(ct) };
+      }),
+      age: r.rows[0].updated_at
+    };
   } catch {}
   return null;
 }
@@ -104,7 +141,11 @@ async function getPortfolio() {
 
   try {
     const { data } = await client().get('/equity/portfolio');
-    const positions = Array.isArray(data) ? data : [];
+    const raw = Array.isArray(data) ? data : [];
+    const positions = raw.map(p => {
+      const ct = cleanTicker(p.ticker);
+      return { ...p, ticker: ct, rawTicker: p.ticker, companyName: getCompanyName(ct) };
+    });
     await toRedis('t212:portfolio', 30, positions);
     await savePositionsToDB(positions);
     return { data: positions, source: 'live' };

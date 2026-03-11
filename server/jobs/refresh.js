@@ -70,6 +70,14 @@ function startJobs() {
     const { scheduleIfDue: insiderDue } = require('./insiderScraper');
     await insiderDue().catch(e => console.error('[insider cron]', e.message));
   });
+  cron.schedule('0 */6 * * *', async () => {
+    const { runEarningsScraper } = require('../scrapers/earningsCalendar');
+    runEarningsScraper().catch(e => console.error('[earnings cron]', e.message));
+  });
+  cron.schedule('*/30 * * * *', async () => {
+    const { runActualsUpdater } = require('../scrapers/earningsActuals');
+    runActualsUpdater().catch(e => console.error('[earnings actuals cron]', e.message));
+  });
   console.log('Refresh jobs started');
 }
 

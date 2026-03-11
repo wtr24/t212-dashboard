@@ -31,6 +31,7 @@ export default function Topbar() {
     '/predictions': 'AI Signals',
     '/congress': 'Congress Tracker',
     '/insider': 'Insider Trading',
+    '/earnings': 'Earnings Calendar',
     '/history': 'Order History',
     '/dividends': 'Dividends',
     '/settings': 'Settings',
