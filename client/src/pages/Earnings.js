@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, RefreshCw, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Loader } from 'lucide-react';
 import { StockLogo } from '../utils/stockLogo';
 
-const API = process.env.REACT_APP_API_URL || 'http://localhost:5002';
+const BASE = process.env.REACT_APP_API_URL || 'http://localhost:5002/api';
 
 function fmt2(n) { return (n == null || isNaN(n)) ? '—' : (n >= 0 ? '+' : '') + Number(n).toFixed(2); }
 function fmtEps(n) { return n == null ? '—' : (n >= 0 ? '+' : '') + '$' + Math.abs(n).toFixed(2); }
@@ -222,8 +222,8 @@ export default function Earnings() {
     setLoading(true);
     try {
       const [res, statusRes] = await Promise.all([
-        fetch(`${API}/api/earnings/${view === 'history' ? 'history' : view === 'month' ? 'month' : view === 'today' ? 'today' : 'week'}`),
-        fetch(`${API}/api/earnings/scrape-status`),
+        fetch(`${BASE}/earnings/${view === 'history' ? 'history' : view === 'month' ? 'month' : view === 'today' ? 'today' : 'week'}`),
+        fetch(`${BASE}/earnings/scrape-status`),
       ]);
       const json = await res.json();
       const status = await statusRes.json().catch(() => null);
@@ -241,7 +241,7 @@ export default function Earnings() {
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      await fetch(`${API}/api/earnings/refresh`, { method: 'POST' });
+      await fetch(`${BASE}/earnings/refresh`, { method: 'POST' });
       setTimeout(() => { fetchData(tab); setRefreshing(false); }, 3000);
     } catch { setRefreshing(false); }
   };
