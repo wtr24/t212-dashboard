@@ -7,6 +7,27 @@ const BASE = process.env.REACT_APP_API_URL || 'http://localhost:5002/api';
 
 function fmt2(n) { return (n == null || isNaN(n)) ? '—' : (n >= 0 ? '+' : '') + Number(n).toFixed(2); }
 function fmtEps(n) { return n == null ? '—' : (n >= 0 ? '+' : '') + '$' + Math.abs(n).toFixed(2); }
+function fmtRev(n) {
+  if (n == null) return null;
+  const v = Number(n);
+  if (v >= 1e12) return `$${(v/1e12).toFixed(2)}T`;
+  if (v >= 1e9) return `$${(v/1e9).toFixed(1)}B`;
+  if (v >= 1e6) return `$${(v/1e6).toFixed(0)}M`;
+  return `$${v.toLocaleString()}`;
+}
+function fmtMktCap(n) {
+  if (n == null) return null;
+  const v = Number(n);
+  if (v >= 1e12) return `$${(v/1e12).toFixed(1)}T`;
+  if (v >= 1e9) return `$${(v/1e9).toFixed(0)}B`;
+  if (v >= 1e6) return `$${(v/1e6).toFixed(0)}M`;
+  return null;
+}
+function capRec(r) {
+  if (!r) return null;
+  const map = { strongbuy: 'Strong Buy', buy: 'Buy', hold: 'Hold', sell: 'Sell', strongsell: 'Strong Sell', underperform: 'Underperform', outperform: 'Outperform' };
+  return map[r.toLowerCase().replace(/[\s_]/g, '')] || r;
+}
 
 function SurprisePill({ surprise, surprisePct }) {
   if (surprise == null) return null;
@@ -54,6 +75,47 @@ function BeatBar({ probability }) {
       </div>
       <div style={{ height: 4, background: 'var(--surface-2)', borderRadius: 2, overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 2, transition: 'width 0.6s ease' }} />
+      </div>
+    </div>
+  );
+}
+
+function AnalystRecommendationPill({ rec }) {
+  if (!rec) return null;
+  const label = capRec(rec);
+  const r = rec.toLowerCase().replace(/[\s_]/g, '');
+  const color = r === 'strongbuy' || r === 'buy' || r === 'outperform' ? '#10b981'
+    : r === 'sell' || r === 'strongsell' || r === 'underperform' ? '#ef4444'
+    : '#f59e0b';
+  return (
+    <span style={{ fontSize: 10, fontWeight: 600, color, background: `${color}15`, padding: '2px 7px', borderRadius: 5 }}>
+      {label}
+    </span>
+  );
+}
+
+function AnalystConsensusBar({ strongBuy, buy, hold, sell, strongSell }) {
+  const b = (strongBuy || 0) + (buy || 0);
+  const h = hold || 0;
+  const s = (sell || 0) + (strongSell || 0);
+  const total = b + h + s;
+  if (!total) return null;
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4, fontSize: 10, color: 'var(--text-3)' }}>
+        <span>Analyst Consensus ({total})</span>
+        <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>
+          <span style={{ color: '#10b981' }}>B{b}</span>
+          {' · '}
+          <span style={{ color: '#f59e0b' }}>H{h}</span>
+          {' · '}
+          <span style={{ color: '#ef4444' }}>S{s}</span>
+        </span>
+      </div>
+      <div style={{ height: 6, borderRadius: 3, overflow: 'hidden', display: 'flex' }}>
+        <div style={{ width: `${(b/total)*100}%`, background: '#10b981' }} />
+        <div style={{ width: `${(h/total)*100}%`, background: '#f59e0b' }} />
+        <div style={{ width: `${(s/total)*100}%`, background: '#ef4444' }} />
       </div>
     </div>
   );
@@ -220,9 +282,13 @@ function EarningsCard({ e, expanded, onToggle }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <span style={{ fontWeight: 700, fontSize: 14 }}>{e.ticker}</span>
+              {fmtMktCap(e.market_cap) && (
+                <span style={{ fontSize: 10, color: 'var(--text-3)', background: 'var(--surface-2)', padding: '2px 6px', borderRadius: 5, fontFamily: 'JetBrains Mono, monospace' }}>{fmtMktCap(e.market_cap)}</span>
+              )}
               <TimeBadge time={e.report_time} />
               {reported && <SurprisePill surprise={e.eps_surprise} surprisePct={e.eps_surprise_pct} />}
               <AiSignalBadge signal={e.ai_signal} confidence={e.ai_confidence} />
+              <AnalystRecommendationPill rec={e.analyst_recommendation} />
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-3)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.company || e.ticker}</div>
             {hasAi && <BeatBar probability={e.ai_beat_probability} />}
@@ -239,19 +305,31 @@ function EarningsCard({ e, expanded, onToggle }) {
             <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} style={{ overflow: 'hidden' }}>
               <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '8px 16px' }}>
                 {[
-                  { label: 'EPS Estimate', value: fmtEps(e.eps_estimate) },
+                  { label: 'EPS Estimate', value: fmtEps(e.eps_estimate), sub: (e.eps_estimate_low != null && e.eps_estimate_high != null) ? `${fmtEps(e.eps_estimate_low)} – ${fmtEps(e.eps_estimate_high)}` : null },
                   { label: 'EPS Actual', value: reported ? fmtEps(e.eps_actual) : '—' },
                   { label: 'Surprise', value: reported ? fmt2(e.eps_surprise) : '—' },
                   { label: 'Quarter', value: e.fiscal_quarter || '—' },
-                  { label: 'Rev Estimate', value: e.revenue_estimate ? `$${(e.revenue_estimate/1e9).toFixed(1)}B` : '—' },
-                  { label: 'Rev Actual', value: e.revenue_actual ? `$${(e.revenue_actual/1e9).toFixed(1)}B` : '—' },
-                ].map(({ label, value }) => (
+                  {
+                    label: 'Rev Estimate',
+                    value: fmtRev(e.revenue_estimate) || (e.revenue_estimate_low != null ? `${fmtRev(e.revenue_estimate_low)} – ${fmtRev(e.revenue_estimate_high)}` : '—'),
+                    sub: e.revenue_estimate != null && e.revenue_estimate_low != null ? `${fmtRev(e.revenue_estimate_low)} – ${fmtRev(e.revenue_estimate_high)}` : null,
+                  },
+                  { label: 'Rev Actual', value: fmtRev(e.revenue_actual) || '—' },
+                  { label: 'Analyst Target', value: e.analyst_target_price ? `$${parseFloat(e.analyst_target_price).toFixed(2)}` : '—' },
+                  { label: 'Mkt Cap', value: fmtMktCap(e.market_cap) || '—' },
+                ].map(({ label, value, sub }) => (
                   <div key={label}>
                     <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 2 }}>{label}</div>
                     <div style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{value}</div>
+                    {sub && <div style={{ fontSize: 10, color: 'var(--text-3)', marginTop: 1, fontFamily: 'JetBrains Mono, monospace' }}>{sub}</div>}
                   </div>
                 ))}
               </div>
+              {(e.analyst_strong_buy != null || e.analyst_buy != null || e.analyst_hold != null || e.analyst_sell != null || e.analyst_strong_sell != null) && (
+                <div style={{ marginTop: 12 }}>
+                  <AnalystConsensusBar strongBuy={e.analyst_strong_buy} buy={e.analyst_buy} hold={e.analyst_hold} sell={e.analyst_sell} strongSell={e.analyst_strong_sell} />
+                </div>
+              )}
               {hasAi && e.ai_summary && (
                 <div style={{ marginTop: 12, padding: '10px 12px', background: 'var(--surface-2)', borderLeft: `3px solid ${e.ai_signal === 'BUY' ? '#10b981' : e.ai_signal === 'SELL' ? '#ef4444' : '#f59e0b'}`, borderRadius: '0 8px 8px 0', fontSize: 12, color: 'var(--text-2)', lineHeight: 1.6 }}>
                   <Sparkles size={10} color="#6366f1" style={{ marginRight: 4 }} />{e.ai_summary}

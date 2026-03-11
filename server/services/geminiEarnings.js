@@ -133,14 +133,27 @@ function fetchYahooContext(ticker) {
 // ── Compact prompt (~250-300 tokens) ─────────────────────────────────────────
 
 function buildPrompt(earning, headlines) {
-  const { ticker, company, reportDate, reportTime, epsEstimate, revenueEstimate, fiscalQuarter, beatRateLast4 = 0 } = earning;
+  const {
+    ticker, company, reportDate, reportTime, epsEstimate, revenueEstimate, fiscalQuarter,
+    beatRateLast4 = 0, marketCap, analystRecommendation, analystTargetPrice,
+    analystBuy, analystHold, analystSell,
+  } = earning;
   const newsSection = headlines.length
     ? headlines.map((h, i) => `${i + 1}. ${h}`).join('\n')
     : 'No recent headlines';
-  const revStr = revenueEstimate ? `Rev est: $${(revenueEstimate / 1e9).toFixed(1)}B | ` : '';
+  const lines = [];
+  if (epsEstimate != null) lines.push(`EPS est: $${epsEstimate}`);
+  if (revenueEstimate) lines.push(`Rev est: $${(revenueEstimate / 1e9).toFixed(1)}B`);
+  if (marketCap) lines.push(`Mkt cap: $${(marketCap / 1e9).toFixed(0)}B`);
+  if (analystRecommendation) lines.push(`Rec: ${analystRecommendation.toUpperCase()}`);
+  if (analystTargetPrice) lines.push(`Target: $${analystTargetPrice}`);
+  if (analystBuy != null || analystHold != null || analystSell != null) {
+    lines.push(`Analysts: Buy=${analystBuy ?? 0} Hold=${analystHold ?? 0} Sell=${analystSell ?? 0}`);
+  }
+  lines.push(`Beat rate: ${beatRateLast4}/4`);
   return `Equity analyst. Predict earnings beat/miss for:
 ${ticker} (${company}) | ${fiscalQuarter || 'Q?'} | ${reportDate} ${reportTime || ''}
-EPS est: ${epsEstimate != null ? '$' + epsEstimate : 'N/A'} | ${revStr}Historical beat rate: ${beatRateLast4}/4
+${lines.join(' | ')}
 
 Recent headlines (Yahoo Finance):
 ${newsSection}

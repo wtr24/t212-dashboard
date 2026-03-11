@@ -271,6 +271,23 @@ async function initDB() {
   `);
 
   await pool.query(`
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS market_cap BIGINT;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS analyst_strong_buy INT;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS analyst_buy INT;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS analyst_hold INT;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS analyst_sell INT;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS analyst_strong_sell INT;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS eps_estimate_low DECIMAL;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS eps_estimate_high DECIMAL;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS revenue_estimate_low BIGINT;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS revenue_estimate_high BIGINT;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS analyst_target_price DECIMAL;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS analyst_recommendation VARCHAR(20);
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS pe_ratio DECIMAL;
+    ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS profit_margin DECIMAL;
+  `);
+
+  await pool.query(`
     DO $$ BEGIN
       IF NOT EXISTS (
         SELECT 1 FROM pg_constraint WHERE conname = 'insider_trades_unique_key'

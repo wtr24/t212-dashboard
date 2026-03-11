@@ -88,7 +88,14 @@ async function runBatch(rows, label) {
     const result = await analyzeEarning({
       ticker: e.ticker, company: e.company, reportDate: reportDateStr,
       reportTime: e.report_time, epsEstimate: parseFloat(e.eps_estimate) || null,
-      revenueEstimate: e.revenue_estimate, fiscalQuarter: e.fiscal_quarter,
+      revenueEstimate: e.revenue_estimate ? parseInt(e.revenue_estimate) : null,
+      fiscalQuarter: e.fiscal_quarter,
+      marketCap: e.market_cap ? parseInt(e.market_cap) : null,
+      analystRecommendation: e.analyst_recommendation || null,
+      analystTargetPrice: e.analyst_target_price ? parseFloat(e.analyst_target_price) : null,
+      analystBuy: e.analyst_buy != null ? parseInt(e.analyst_buy) : null,
+      analystHold: e.analyst_hold != null ? parseInt(e.analyst_hold) : null,
+      analystSell: e.analyst_sell != null ? parseInt(e.analyst_sell) : null,
       beatRateLast4: 0, avgSurprisePct: 0,
     });
 
@@ -214,7 +221,7 @@ async function runEarningsAiAnalysis(force = false) {
   try {
     const today = new Date().toISOString().split('T')[0];
     const effectiveRemaining = await getRemainingQuota();
-    const limit = Math.min(effectiveRemaining, FREE_RPD);
+    const limit = Math.min(effectiveRemaining, 10);
 
     let rows = await getPrioritizedEarnings(today, limit);
 

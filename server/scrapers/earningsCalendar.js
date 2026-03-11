@@ -86,6 +86,98 @@ async function fetchYahooEarnings(ticker) {
   } catch { return null; }
 }
 
+async function fetchYahooEnrichment(ticker) {
+  try {
+    const res = await axios.get(`https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}`, {
+      params: { modules: 'earningsTrend,financialData,defaultKeyStatistics,recommendationTrend,price' },
+      headers: { 'User-Agent': UA, Accept: 'application/json' },
+      timeout: 12000,
+    });
+    return res.data?.quoteSummary?.result?.[0] || null;
+  } catch { return null; }
+}
+
+async function enrichEarningsFromYahoo() {
+  // Find upcoming earnings with missing revenue or analyst data
+  const { rows } = await query(
+    `SELECT DISTINCT ticker, report_date FROM earnings_calendar
+     WHERE status='upcoming' AND report_date >= CURRENT_DATE
+       AND (revenue_estimate IS NULL OR market_cap IS NULL)
+     ORDER BY report_date ASC LIMIT 100`
+  ).catch(() => ({ rows: [] }));
+
+  if (!rows.length) {
+    console.log('[earnings enrich] No tickers need enrichment');
+    return 0;
+  }
+
+  // Deduplicate tickers (only need one fetch per ticker)
+  const uniqueTickers = [...new Set(rows.map(r => r.ticker))];
+  console.log(`[earnings enrich] Enriching ${uniqueTickers.length} tickers from Yahoo`);
+  let enriched = 0;
+
+  for (let i = 0; i < uniqueTickers.length; i += 5) {
+    const batch = uniqueTickers.slice(i, i + 5);
+    await Promise.allSettled(batch.map(async ticker => {
+      const data = await fetchYahooEnrichment(ticker);
+      if (!data) return;
+
+      const trend = data.earningsTrend?.trend?.[0] || {};
+      const fin = data.financialData || {};
+      const stats = data.defaultKeyStatistics || {};
+      const recTrend = data.recommendationTrend?.trend?.[0] || {};
+
+      const revenue_estimate = trend.revenueEstimate?.avg?.raw
+        ? Math.round(trend.revenueEstimate.avg.raw) : null;
+      const revenue_estimate_low = trend.revenueEstimate?.low?.raw
+        ? Math.round(trend.revenueEstimate.low.raw) : null;
+      const revenue_estimate_high = trend.revenueEstimate?.high?.raw
+        ? Math.round(trend.revenueEstimate.high.raw) : null;
+      const eps_estimate_low = trend.earningsEstimate?.low?.raw ?? null;
+      const eps_estimate_high = trend.earningsEstimate?.high?.raw ?? null;
+      const analyst_count = trend.revenueEstimate?.numberOfAnalysts?.raw ?? null;
+
+      const market_cap = data.price?.marketCap?.raw ?? null;
+      const analyst_target_price = fin.targetMeanPrice?.raw ?? null;
+      const analyst_recommendation = fin.recommendationKey || null;
+      const profit_margin = fin.profitMargins?.raw ?? null;
+      const pe_ratio = stats.forwardPE?.raw ?? stats.trailingPE?.raw ?? null;
+
+      const analyst_strong_buy = recTrend.strongBuy ?? null;
+      const analyst_buy = recTrend.buy ?? null;
+      const analyst_hold = recTrend.hold ?? null;
+      const analyst_sell = recTrend.sell ?? null;
+      const analyst_strong_sell = recTrend.strongSell ?? null;
+
+      // Only proceed if we got at least some useful data
+      if (!revenue_estimate && !market_cap && !analyst_target_price) return;
+
+      // Update all upcoming rows for this ticker
+      const tickerRows = rows.filter(r => r.ticker === ticker);
+      for (const row of tickerRows) {
+        const reportDate = row.report_date instanceof Date
+          ? row.report_date.toISOString().split('T')[0]
+          : String(row.report_date).split('T')[0];
+        await upsertEarning({
+          ticker, report_date: reportDate,
+          revenue_estimate, revenue_estimate_low, revenue_estimate_high,
+          eps_estimate_low, eps_estimate_high,
+          analyst_count, market_cap,
+          analyst_strong_buy, analyst_buy, analyst_hold, analyst_sell, analyst_strong_sell,
+          analyst_target_price, analyst_recommendation,
+          pe_ratio, profit_margin,
+          status: 'upcoming', source: null,
+        }).catch(() => {});
+      }
+      enriched++;
+    }));
+    if (i + 5 < uniqueTickers.length) await sleep(1200);
+  }
+
+  console.log(`[earnings enrich] Done: ${enriched}/${uniqueTickers.length} tickers enriched`);
+  return enriched;
+}
+
 function parseQuarterToDate(dateStr) {
   const m = String(dateStr).match(/^(\d)Q(\d{4})/);
   if (!m) return null;
@@ -209,6 +301,9 @@ async function runEarningsScraper() {
     const nasdaqCount = await scrapeNasdaqWeek().catch(e => { console.error('[earnings] NASDAQ failed:', e.message); return 0; });
     total += nasdaqCount;
 
+    // Enrich NASDAQ-sourced tickers with revenue, market cap, analyst data from Yahoo
+    await enrichEarningsFromYahoo().catch(e => console.error('[earnings] Enrichment failed:', e.message));
+
     const tickers = await getTickersToScrape();
     console.log(`[earnings] Yahoo scraping ${tickers.length} tickers for history`);
     for (let i = 0; i < tickers.length; i += 5) {
@@ -225,4 +320,4 @@ async function runEarningsScraper() {
   }
 }
 
-module.exports = { runEarningsScraper, seedIfEmpty };
+module.exports = { runEarningsScraper, enrichEarningsFromYahoo, seedIfEmpty };

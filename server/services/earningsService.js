@@ -5,16 +5,26 @@ async function upsertEarning(data) {
   const {
     ticker, company, report_date, report_time, fiscal_quarter, fiscal_year,
     eps_estimate, eps_actual, eps_surprise, eps_surprise_pct,
+    eps_estimate_low, eps_estimate_high,
     revenue_estimate, revenue_actual, revenue_surprise_pct,
-    guidance_eps_low, guidance_eps_high, analyst_count, status, source
+    revenue_estimate_low, revenue_estimate_high,
+    guidance_eps_low, guidance_eps_high, analyst_count,
+    market_cap, analyst_strong_buy, analyst_buy, analyst_hold, analyst_sell, analyst_strong_sell,
+    analyst_target_price, analyst_recommendation, pe_ratio, profit_margin,
+    status, source
   } = data;
   await query(
     `INSERT INTO earnings_calendar
       (ticker,company,report_date,report_time,fiscal_quarter,fiscal_year,
        eps_estimate,eps_actual,eps_surprise,eps_surprise_pct,
+       eps_estimate_low,eps_estimate_high,
        revenue_estimate,revenue_actual,revenue_surprise_pct,
-       guidance_eps_low,guidance_eps_high,analyst_count,status,source,updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW())
+       revenue_estimate_low,revenue_estimate_high,
+       guidance_eps_low,guidance_eps_high,analyst_count,
+       market_cap,analyst_strong_buy,analyst_buy,analyst_hold,analyst_sell,analyst_strong_sell,
+       analyst_target_price,analyst_recommendation,pe_ratio,profit_margin,
+       status,source,updated_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,NOW())
      ON CONFLICT (ticker, report_date) DO UPDATE SET
        company=COALESCE(EXCLUDED.company,earnings_calendar.company),
        report_time=COALESCE(EXCLUDED.report_time,earnings_calendar.report_time),
@@ -24,15 +34,35 @@ async function upsertEarning(data) {
        eps_actual=COALESCE(EXCLUDED.eps_actual,earnings_calendar.eps_actual),
        eps_surprise=COALESCE(EXCLUDED.eps_surprise,earnings_calendar.eps_surprise),
        eps_surprise_pct=COALESCE(EXCLUDED.eps_surprise_pct,earnings_calendar.eps_surprise_pct),
+       eps_estimate_low=COALESCE(EXCLUDED.eps_estimate_low,earnings_calendar.eps_estimate_low),
+       eps_estimate_high=COALESCE(EXCLUDED.eps_estimate_high,earnings_calendar.eps_estimate_high),
        revenue_estimate=COALESCE(EXCLUDED.revenue_estimate,earnings_calendar.revenue_estimate),
        revenue_actual=COALESCE(EXCLUDED.revenue_actual,earnings_calendar.revenue_actual),
+       revenue_estimate_low=COALESCE(EXCLUDED.revenue_estimate_low,earnings_calendar.revenue_estimate_low),
+       revenue_estimate_high=COALESCE(EXCLUDED.revenue_estimate_high,earnings_calendar.revenue_estimate_high),
+       market_cap=COALESCE(EXCLUDED.market_cap,earnings_calendar.market_cap),
+       analyst_strong_buy=COALESCE(EXCLUDED.analyst_strong_buy,earnings_calendar.analyst_strong_buy),
+       analyst_buy=COALESCE(EXCLUDED.analyst_buy,earnings_calendar.analyst_buy),
+       analyst_hold=COALESCE(EXCLUDED.analyst_hold,earnings_calendar.analyst_hold),
+       analyst_sell=COALESCE(EXCLUDED.analyst_sell,earnings_calendar.analyst_sell),
+       analyst_strong_sell=COALESCE(EXCLUDED.analyst_strong_sell,earnings_calendar.analyst_strong_sell),
+       analyst_target_price=COALESCE(EXCLUDED.analyst_target_price,earnings_calendar.analyst_target_price),
+       analyst_recommendation=COALESCE(EXCLUDED.analyst_recommendation,earnings_calendar.analyst_recommendation),
+       pe_ratio=COALESCE(EXCLUDED.pe_ratio,earnings_calendar.pe_ratio),
+       profit_margin=COALESCE(EXCLUDED.profit_margin,earnings_calendar.profit_margin),
+       analyst_count=COALESCE(EXCLUDED.analyst_count,earnings_calendar.analyst_count),
        status=CASE WHEN EXCLUDED.status='reported' THEN 'reported' ELSE earnings_calendar.status END,
        source=COALESCE(EXCLUDED.source,earnings_calendar.source),
        updated_at=NOW()`,
     [ticker,company,report_date,report_time||'TNS',fiscal_quarter,fiscal_year,
      eps_estimate,eps_actual,eps_surprise,eps_surprise_pct,
+     eps_estimate_low,eps_estimate_high,
      revenue_estimate,revenue_actual,revenue_surprise_pct,
-     guidance_eps_low,guidance_eps_high,analyst_count,status||'upcoming',source]
+     revenue_estimate_low,revenue_estimate_high,
+     guidance_eps_low,guidance_eps_high,analyst_count,
+     market_cap,analyst_strong_buy,analyst_buy,analyst_hold,analyst_sell,analyst_strong_sell,
+     analyst_target_price,analyst_recommendation,pe_ratio,profit_margin,
+     status||'upcoming',source]
   );
 }
 
