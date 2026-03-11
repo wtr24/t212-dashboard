@@ -99,13 +99,13 @@ router.get('/ai-test', async (req, res) => {
     const keyLen = key?.length || 0;
     const prompt = JSON.stringify({ contents: [{ parts: [{ text: 'Say: OK' }] }], generationConfig: { maxOutputTokens: 10 } });
 
-    const [listV1beta, listV1, flash15, flash15v1, flashLite, geminiPro] = await Promise.all([
+    const [listV1beta, listV1, flash25, flash25v1, flash15, flash20exp] = await Promise.all([
       httpsGet(`/v1beta/models?key=${key}`),
       httpsGet(`/v1/models?key=${key}`),
+      httpsPost(`/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, prompt),
+      httpsPost(`/v1/models/gemini-2.5-flash:generateContent?key=${key}`, prompt),
       httpsPost(`/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, prompt),
-      httpsPost(`/v1/models/gemini-1.5-flash:generateContent?key=${key}`, prompt),
-      httpsPost(`/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${key}`, prompt),
-      httpsPost(`/v1beta/models/gemini-pro:generateContent?key=${key}`, prompt),
+      httpsPost(`/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${key}`, prompt),
     ]);
 
     const parseNames = (r) => {
@@ -117,10 +117,10 @@ router.get('/ai-test', async (req, res) => {
       models_v1beta: { status: listV1beta.status, raw: listV1beta.body.slice(0, 400), names: parseNames(listV1beta) },
       models_v1: { status: listV1.status, raw: listV1.body.slice(0, 200) },
       tests: {
+        'v1beta/gemini-2.5-flash': { status: flash25.status, body: flash25.body.slice(0, 150) },
+        'v1/gemini-2.5-flash': { status: flash25v1.status, body: flash25v1.body.slice(0, 150) },
         'v1beta/gemini-1.5-flash': { status: flash15.status, body: flash15.body.slice(0, 150) },
-        'v1/gemini-1.5-flash': { status: flash15v1.status, body: flash15v1.body.slice(0, 150) },
-        'v1beta/gemini-1.5-flash-latest': { status: flashLite.status, body: flashLite.body.slice(0, 150) },
-        'v1beta/gemini-pro': { status: geminiPro.status, body: geminiPro.body.slice(0, 150) },
+        'v1beta/gemini-2.0-flash-exp': { status: flash20exp.status, body: flash20exp.body.slice(0, 150) },
       },
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
