@@ -3,7 +3,9 @@ const { query } = require('../models/db');
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
-function callGemini(prompt, apiKey) {
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function callGeminiOnce(prompt, apiKey) {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
@@ -19,13 +21,20 @@ function callGemini(prompt, apiKey) {
       let data = '';
       res.on('data', d => { data += d; });
       res.on('end', () => {
+        if (res.statusCode === 429) {
+          reject(Object.assign(new Error(`Gemini 429 rate limit`), { code: 429 }));
+          return;
+        }
         if (res.statusCode !== 200) {
           reject(new Error(`Gemini ${res.statusCode}: ${data.slice(0, 300)}`));
           return;
         }
         try {
           const parsed = JSON.parse(data);
-          const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          // 2.5-flash is a thinking model — skip thought parts, get text
+          const parts = parsed.candidates?.[0]?.content?.parts || [];
+          const text = parts.find(p => p.text && !p.thought)?.text
+            || parts.filter(p => p.text).map(p => p.text).join('').trim();
           resolve(text);
         } catch (e) {
           reject(new Error(`Parse failed: ${data.slice(0, 100)}`));
@@ -33,10 +42,23 @@ function callGemini(prompt, apiKey) {
       });
     });
     req.on('error', reject);
-    req.setTimeout(30000, () => { req.destroy(); reject(new Error('Gemini timeout')); });
+    req.setTimeout(45000, () => { req.destroy(); reject(new Error('Gemini timeout')); });
     req.write(body);
     req.end();
   });
+}
+
+async function callGemini(prompt, apiKey) {
+  try {
+    return await callGeminiOnce(prompt, apiKey);
+  } catch (e) {
+    if (e.code === 429) {
+      console.log('[gemini] Rate limited, waiting 30s...');
+      await sleep(30000);
+      return callGeminiOnce(prompt, apiKey);
+    }
+    throw e;
+  }
 }
 
 function fetchYahooContext(ticker) {

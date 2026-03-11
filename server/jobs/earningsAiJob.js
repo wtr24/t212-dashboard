@@ -99,7 +99,7 @@ async function runEarningsAiAnalysis(force = false) {
         tickers.push(e.ticker);
       }
 
-      if (i < rows.length - 1) await sleep(2000);
+      if (i < rows.length - 1) await sleep(7000);
     }
 
     await setSetting('earnings_ai_last_run', new Date().toISOString().split('T')[0]);
