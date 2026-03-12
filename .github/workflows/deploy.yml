@@ -42,22 +42,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Deploy to NAS
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.NAS_HOST }}
-          username: ${{ secrets.NAS_SSH_USER }}
-          key: ${{ secrets.NAS_SSH_KEY }}
-          port: 22
-          script: |
-            cd /volume1/docker/t212-dashboard
-            docker compose pull
-            docker compose up -d --remove-orphans
-            sleep 20
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5002/api/health)
-            echo "Health check: $STATUS"
-            exit $([ "$STATUS" = "200" ] && echo 0 || echo 1)
-
       - name: Discord Notification
         if: always()
         env:
