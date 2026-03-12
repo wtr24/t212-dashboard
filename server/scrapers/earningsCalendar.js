@@ -301,9 +301,6 @@ async function runEarningsScraper() {
     const nasdaqCount = await scrapeNasdaqWeek().catch(e => { console.error('[earnings] NASDAQ failed:', e.message); return 0; });
     total += nasdaqCount;
 
-    // Enrich NASDAQ-sourced tickers with revenue, market cap, analyst data from Yahoo
-    await enrichEarningsFromYahoo().catch(e => console.error('[earnings] Enrichment failed:', e.message));
-
     const tickers = await getTickersToScrape();
     console.log(`[earnings] Yahoo scraping ${tickers.length} tickers for history`);
     for (let i = 0; i < tickers.length; i += 5) {
@@ -312,6 +309,10 @@ async function runEarningsScraper() {
       for (const r of results) if (r.status === 'fulfilled') total += r.value;
       if (i + 5 < tickers.length) await sleep(1200);
     }
+
+    // Enrich after all ticker saves so market_cap/analyst data fills in correctly
+    await enrichEarningsFromYahoo().catch(e => console.error('[earnings] Enrichment failed:', e.message));
+
     await seedIfEmpty();
     console.log(`[earnings] Total saved: ${total}`);
     return { count: total };

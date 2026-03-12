@@ -99,6 +99,18 @@ router.post('/refresh', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.post('/enrich', async (req, res) => {
+  try {
+    const { enrichEarningsFromYahoo } = require('../scrapers/earningsCalendar');
+    await cache.del('earnings:today').catch(() => {});
+    await cache.del('earnings:week').catch(() => {});
+    enrichEarningsFromYahoo()
+      .then(n => console.log(`[earnings enrich] ${n} tickers enriched`))
+      .catch(e => console.error('[earnings enrich]', e.message));
+    res.json({ triggered: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // AI diagnostic: test single stock analysis
 router.get('/ai-test', async (req, res) => {
   try {

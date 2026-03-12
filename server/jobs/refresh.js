@@ -74,6 +74,11 @@ function startJobs() {
     const { runEarningsScraper } = require('../scrapers/earningsCalendar');
     runEarningsScraper().catch(e => console.error('[earnings cron]', e.message));
   });
+  // Daily enrichment pass for revenue/market_cap/analyst fields at 6am
+  cron.schedule('0 6 * * *', async () => {
+    const { enrichEarningsFromYahoo } = require('../scrapers/earningsCalendar');
+    enrichEarningsFromYahoo().catch(e => console.error('[earnings enrich cron]', e.message));
+  });
   cron.schedule('*/30 * * * *', async () => {
     const { runActualsUpdater } = require('../scrapers/earningsActuals');
     runActualsUpdater().catch(e => console.error('[earnings actuals cron]', e.message));
