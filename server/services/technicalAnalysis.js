@@ -1,38 +1,12 @@
-const axios = require('axios');
 const { query } = require('../models/db');
+const { fetchOHLCV: mdfFetchOHLCV, fetchLiveQuote } = require('./marketDataFetcher');
 
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122 Safari/537.36';
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// ── Data fetching ─────────────────────────────────────────────────────────────
-
 async function fetchOHLCV(ticker) {
-  try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`;
-    const { data } = await axios.get(url, { headers: { 'User-Agent': UA }, timeout: 12000 });
-    const res = data?.chart?.result?.[0];
-    if (!res) return null;
-
-    const ts = res.timestamp || [];
-    const q = res.indicators?.quote?.[0] || {};
-    const adj = res.indicators?.adjclose?.[0]?.adjclose || [];
-    const meta = res.meta || {};
-
-    const candles = ts.map((t, i) => ({
-      date: new Date(t * 1000),
-      open: q.open?.[i],
-      high: q.high?.[i],
-      low: q.low?.[i],
-      close: q.close?.[i],
-      volume: q.volume?.[i],
-      adjClose: adj[i],
-    })).filter(c => c.close != null && c.high != null && c.low != null && c.open != null && c.volume != null);
-
-    return { candles, meta };
-  } catch (e) {
-    console.error(`[TA] fetchOHLCV ${ticker}: ${e.message}`);
-    return null;
-  }
+  const result = await mdfFetchOHLCV(ticker, 250);
+  if (!result || !result.candles.length) return null;
+  return { candles: result.candles, meta: result.meta || {}, source: result.source };
 }
 
 // ── Indicator calculations ────────────────────────────────────────────────────
@@ -303,7 +277,7 @@ async function analyseStock(ticker) {
   if (!fetched) return { error: 'fetch_failed', ticker };
 
   const { candles, meta } = fetched;
-  if (candles.length < 50) return { error: 'insufficient_data', ticker };
+  if (candles.length < 20) return { error: 'insufficient_data', ticker };
 
   const closes = candles.map(c => c.close);
 
@@ -318,13 +292,17 @@ async function analyseStock(ticker) {
   const atr = calcATR(candles, 14);
   const stoch = calcStochastic(candles);
   const obv = calcOBV(candles);
-  const sr = findSupportResistance(candles, 60);
+  const srLookback = Math.min(60, candles.length);
+  const sr = findSupportResistance(candles, srLookback);
 
   const price = meta.regularMarketPrice || closes[closes.length - 1];
   const prevClose = meta.chartPreviousClose || closes[closes.length - 2];
   const week52High = meta.fiftyTwoWeekHigh || Math.max(...closes);
   const week52Low = meta.fiftyTwoWeekLow || Math.min(...closes);
-  const volumeToday = meta.regularMarketVolume || candles[candles.length - 1].volume;
+  const lastCandle = candles[candles.length - 1];
+  const volumeToday = (meta.regularMarketVolume && meta.regularMarketVolume > 0)
+    ? meta.regularMarketVolume
+    : lastCandle.volume || 0;
   const openPrice = meta.regularMarketOpen || candles[candles.length - 1].open;
   const dayHigh = meta.regularMarketDayHigh || candles[candles.length - 1].high;
   const dayLow = meta.regularMarketDayLow || candles[candles.length - 1].low;
@@ -424,12 +402,12 @@ async function analyseStock(ticker) {
     volumeTrend: volRatio > 1.2 ? 'HIGH' : 'NORMAL',
     obv,
     obvTrend,
-    support1: sr.support1,
-    support2: sr.support2,
-    resistance1: sr.resistance1,
-    resistance2: sr.resistance2,
-    nearestSupport: sr.support1,
-    nearestResistance: sr.resistance1,
+    support1: sr.support1 ?? (week52Low ? week52Low * 1.02 : null),
+    support2: sr.support2 ?? null,
+    resistance1: sr.resistance1 ?? (week52High ? week52High * 0.98 : null),
+    resistance2: sr.resistance2 ?? null,
+    nearestSupport: sr.support1 ?? (week52Low ? week52Low * 1.02 : null),
+    nearestResistance: sr.resistance1 ?? (week52High ? week52High * 0.98 : null),
     distanceToSupportPct: sr.support1 && price ? ((price - sr.support1) / price) * 100 : null,
     distanceToResistancePct: sr.resistance1 && price ? ((sr.resistance1 - price) / price) * 100 : null,
     technicalScore: scored.score,

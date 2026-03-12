@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
-import { CheckCircle, XCircle, RefreshCw, Eye, EyeOff, Sparkles, ChevronDown, ChevronUp, Loader, Play, Bell, Send } from 'lucide-react';
+import { CheckCircle, XCircle, RefreshCw, Eye, EyeOff, Sparkles, ChevronDown, ChevronUp, Loader, Play, Bell, Send, Activity } from 'lucide-react';
 
 const BASE = process.env.REACT_APP_API_URL || 'http://localhost:5002/api';
 
@@ -345,6 +345,97 @@ function DiscordEarningsSection() {
   );
 }
 
+function DataSourcesSection() {
+  const [quota, setQuota] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [open, setOpen] = useState({});
+
+  const load = () => {
+    setLoading(true);
+    fetch(`${BASE}/admin/quota-status`)
+      .then(r => r.json())
+      .then(d => { setQuota(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const SOURCES = [
+    { key: 'yahoofinance', label: 'Yahoo Finance', link: null, envVar: null, note: 'Primary source — no key needed' },
+    { key: 'fmp', label: 'FMP', link: 'financialmodelingprep.com/register', envVar: 'FMP_KEY', note: '250 req/day — revenue & analyst estimates' },
+    { key: 'twelvedata', label: 'Twelve Data', link: 'twelvedata.com/register', envVar: 'TWELVE_DATA_KEY', note: '800 req/day — OHLCV fallback, live quotes' },
+    { key: 'polygon', label: 'Polygon.io', link: 'polygon.io/dashboard/signup', envVar: 'POLYGON_KEY', note: '5 RPM unlimited — news, prev close' },
+    { key: 'alphavantage', label: 'Alpha Vantage', link: 'alphavantage.co/support/#api-key', envVar: 'ALPHA_VANTAGE_KEY', note: '25 req/day — use sparingly for portfolio only' },
+  ];
+
+  function StatusPill({ status, used, limit }) {
+    const cfg = {
+      ready:     { color: '#475569', bg: 'rgba(71,85,105,0.15)',  label: 'Ready' },
+      active:    { color: '#10b981', bg: 'rgba(16,185,129,0.12)', label: 'Active' },
+      low:       { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', label: 'Running Low' },
+      critical:  { color: '#f97316', bg: 'rgba(249,115,22,0.12)', label: 'Critical' },
+      exhausted: { color: '#ef4444', bg: 'rgba(239,68,68,0.12)',  label: 'Exhausted · resets midnight' },
+    }[status] || { color: 'var(--text-3)', bg: 'var(--surface-2)', label: status };
+    return (
+      <span style={{ fontSize: 10, fontWeight: 700, color: cfg.color, background: cfg.bg, padding: '2px 8px', borderRadius: 4 }}>
+        {cfg.label}
+      </span>
+    );
+  }
+
+  return (
+    <motion.div className="card" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }} style={{ padding: 24, gridColumn: '1 / -1' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Activity size={18} color="#3b82f6" />
+          <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>Market Data Sources</div>
+        </div>
+        <button onClick={load} style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, padding: '5px 12px', color: 'var(--text-3)', fontSize: 12, cursor: 'pointer' }}>
+          <RefreshCw size={11} /> Refresh
+        </button>
+      </div>
+
+      {loading ? (
+        <div style={{ fontSize: 12, color: 'var(--text-3)', padding: '12px 0' }}>Loading quota status...</div>
+      ) : (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1.5fr', gap: 0, background: 'var(--surface-2)', padding: '8px 16px', fontSize: 10, fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.8 }}>
+            <span>Source</span><span>Used Today</span><span>Daily Limit</span><span>Remaining</span><span>Status</span>
+          </div>
+          {SOURCES.map((s, i) => {
+            const q = quota?.[s.key];
+            const isOpen = open[s.key];
+            return (
+              <div key={s.key} style={{ borderTop: i === 0 ? 'none' : '1px solid var(--border)' }}>
+                <div
+                  onClick={() => s.link && setOpen(o => ({ ...o, [s.key]: !o[s.key] }))}
+                  style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1fr 1.5fr', gap: 0, padding: '12px 16px', alignItems: 'center', cursor: s.link ? 'pointer' : 'default' }}
+                >
+                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    {s.label}
+                    {s.link && <span style={{ fontSize: 9, color: 'var(--text-3)' }}>{isOpen ? '▲' : '▼'}</span>}
+                  </div>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: 'var(--text-2)' }}>{q?.used ?? '—'}</span>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: 'var(--text-2)' }}>{q?.limit ?? '—'}</span>
+                  <span style={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13, color: 'var(--text-2)' }}>{q?.remaining ?? '—'}</span>
+                  <StatusPill status={q?.status || 'ready'} used={q?.used} limit={q?.limit} />
+                </div>
+                {isOpen && s.link && (
+                  <div style={{ padding: '0 16px 12px 16px', fontSize: 11, color: 'var(--text-3)', background: 'var(--surface-2)', lineHeight: 1.8 }}>
+                    <div>{s.note}</div>
+                    <div>Add <code style={{ background: 'var(--bg)', padding: '1px 5px', borderRadius: 3, fontFamily: 'JetBrains Mono, monospace', color: '#3b82f6' }}>{s.envVar}=your_key</code> to <code style={{ background: 'var(--bg)', padding: '1px 5px', borderRadius: 3 }}>nas-deploy/.env</code></div>
+                    <div>Get free key: <span style={{ color: '#3b82f6', fontWeight: 500 }}>{s.link}</span></div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 export default function Settings() {
   return (
     <div>
@@ -374,6 +465,7 @@ export default function Settings() {
 
         <EarningsAiSection />
         <DiscordEarningsSection />
+        <DataSourcesSection />
       </div>
 
       <motion.div className="card" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }} style={{ padding: 24 }}>

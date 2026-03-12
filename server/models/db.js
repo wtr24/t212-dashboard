@@ -363,6 +363,14 @@ async function initDB() {
       error TEXT,
       duration_ms INTEGER
     );
+
+    CREATE TABLE IF NOT EXISTS api_usage (
+      api_name VARCHAR(50) NOT NULL,
+      date DATE NOT NULL DEFAULT CURRENT_DATE,
+      requests_today INT DEFAULT 0,
+      last_request_at TIMESTAMP,
+      PRIMARY KEY (api_name, date)
+    );
   `);
 }
 
