@@ -35,6 +35,7 @@ app.use('/api/congress', require('./routes/congress'));
 app.use('/api/insider', require('./routes/insider'));
 app.use('/api/stocks', require('./routes/stocks'));
 app.use('/api/earnings', require('./routes/earnings'));
+app.use('/api/technical', require('./routes/technical'));
 
 // Settings CRUD
 app.get('/api/settings', async (req, res) => {

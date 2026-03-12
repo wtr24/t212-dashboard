@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Calendar, RefreshCw, Clock, TrendingUp, TrendingDown, ChevronDown, ChevronUp, Loader, Sparkles, X } from 'lucide-react';
 import { StockLogo } from '../utils/stockLogo';
+import TechnicalAnalysisPanel from '../components/TechnicalAnalysisPanel';
 
 const BASE = process.env.REACT_APP_API_URL || 'http://localhost:5002/api';
 
@@ -376,6 +377,10 @@ function EarningsCard({ e, expanded, onToggle }) {
                   AI analysis pending — use Settings → Earnings AI → Run Now
                 </div>
               )}
+              <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+                <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>Technical Setup</div>
+                <TechnicalAnalysisPanel ticker={e.ticker} compact={true} />
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

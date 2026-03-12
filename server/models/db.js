@@ -271,6 +271,36 @@ async function initDB() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS technical_analysis (
+      id SERIAL PRIMARY KEY,
+      ticker VARCHAR(20) NOT NULL,
+      analysed_at TIMESTAMP DEFAULT NOW(),
+      current_price DECIMAL, prev_close DECIMAL, open_price DECIMAL,
+      day_high DECIMAL, day_low DECIMAL, week_52_high DECIMAL, week_52_low DECIMAL,
+      price_vs_52w_pct DECIMAL,
+      ma_20 DECIMAL, ma_50 DECIMAL, ma_200 DECIMAL, ema_12 DECIMAL, ema_26 DECIMAL,
+      price_vs_ma50_pct DECIMAL, price_vs_ma200_pct DECIMAL, ma50_vs_ma200_pct DECIMAL,
+      golden_cross BOOLEAN, death_cross BOOLEAN, trend VARCHAR(20),
+      rsi_14 DECIMAL, rsi_signal VARCHAR(20),
+      macd DECIMAL, macd_signal DECIMAL, macd_histogram DECIMAL, macd_trend VARCHAR(20),
+      stoch_k DECIMAL, stoch_d DECIMAL, stoch_signal VARCHAR(20),
+      atr_14 DECIMAL, atr_pct DECIMAL,
+      bollinger_upper DECIMAL, bollinger_mid DECIMAL, bollinger_lower DECIMAL,
+      bollinger_width DECIMAL, bollinger_position VARCHAR(20),
+      volume_today BIGINT, volume_avg_20d BIGINT, volume_ratio DECIMAL,
+      volume_trend VARCHAR(20), obv BIGINT, obv_trend VARCHAR(20),
+      support_1 DECIMAL, support_2 DECIMAL, resistance_1 DECIMAL, resistance_2 DECIMAL,
+      nearest_support DECIMAL, nearest_resistance DECIMAL,
+      distance_to_support_pct DECIMAL, distance_to_resistance_pct DECIMAL,
+      technical_score INT, technical_grade VARCHAR(5), technical_signal VARCHAR(20),
+      bull_signals INT, bear_signals INT, neutral_signals INT,
+      signal_details JSONB,
+      UNIQUE(ticker)
+    );
+    CREATE INDEX IF NOT EXISTS idx_ta_ticker ON technical_analysis(ticker);
+    CREATE INDEX IF NOT EXISTS idx_ta_analysed ON technical_analysis(analysed_at);
+    CREATE INDEX IF NOT EXISTS idx_ta_score ON technical_analysis(technical_score DESC);
+
     ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS market_cap BIGINT;
     ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS analyst_strong_buy INT;
     ALTER TABLE earnings_calendar ADD COLUMN IF NOT EXISTS analyst_buy INT;

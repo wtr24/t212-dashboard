@@ -5,6 +5,7 @@ import DataBanner from '../components/DataBanner';
 import { SkeletonRow } from '../components/Skeleton';
 import { StockLogo } from '../utils/stockLogo';
 import { Search, TrendingUp, TrendingDown, ArrowUpRight } from 'lucide-react';
+import TechnicalAnalysisPanel from '../components/TechnicalAnalysisPanel';
 
 const COMPANY_MAP = {
   PLTR:'Palantir Technologies',NVDA:'NVIDIA Corporation',AAPL:'Apple Inc.',
@@ -217,6 +218,10 @@ export default function Positions() {
                         </div>
                       </div>
                     )}
+                    <div style={{ width: '100%', marginTop: 8, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+                      <div style={{ fontSize: 10, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4 }}>Technical Analysis</div>
+                      <TechnicalAnalysisPanel ticker={p.ticker} compact={true} />
+                    </div>
                   </motion.div>
                 )}
               </motion.div>

@@ -78,6 +78,21 @@ function startJobs() {
     const { runActualsUpdater } = require('../scrapers/earningsActuals');
     runActualsUpdater().catch(e => console.error('[earnings actuals cron]', e.message));
   });
+  // Technical analysis: every hour during market hours Mon-Fri 9am-5pm London
+  cron.schedule('0 9-17 * * 1-5', async () => {
+    const { analysePortfolio } = require('../services/technicalAnalysis');
+    try {
+      const result = await t212.getPortfolio();
+      const positions = result.data || [];
+      const tickers = [...new Set(positions.map(p => {
+        return (p.ticker || '').replace(/[_](US|UK|EQ|NASDAQ|NYSE|LSE|ALL)[_A-Z0-9]*/g, '').split('_')[0] || p.ticker;
+      }).filter(Boolean))];
+      if (tickers.length) {
+        console.log(`[TA] Scheduled refresh for ${tickers.length} tickers`);
+        analysePortfolio(tickers).catch(e => console.error('[TA] refresh failed:', e.message));
+      }
+    } catch (e) { console.error('[TA] cron failed:', e.message); }
+  });
   console.log('Refresh jobs started');
 }
 

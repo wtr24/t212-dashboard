@@ -1,5 +1,6 @@
 const https = require('https');
 const { query } = require('../models/db');
+const { getFromDB } = require('./technicalAnalysis');
 
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 const FREE_RPD = parseInt(process.env.GEMINI_RPD || '20');
@@ -132,7 +133,7 @@ function fetchYahooContext(ticker) {
 
 // ── Compact prompt (~250-300 tokens) ─────────────────────────────────────────
 
-function buildPrompt(earning, headlines) {
+function buildPrompt(earning, headlines, tech) {
   const {
     ticker, company, reportDate, reportTime, epsEstimate, revenueEstimate, fiscalQuarter,
     beatRateLast4 = 0, marketCap, analystRecommendation, analystTargetPrice,
@@ -151,15 +152,24 @@ function buildPrompt(earning, headlines) {
     lines.push(`Analysts: Buy=${analystBuy ?? 0} Hold=${analystHold ?? 0} Sell=${analystSell ?? 0}`);
   }
   lines.push(`Beat rate: ${beatRateLast4}/4`);
+  const techSection = tech ? `
+TECHNICAL ANALYSIS:
+Trend: ${tech.trend || 'unknown'} | Score: ${tech.technical_score || '—'}/100 (${tech.technical_grade || '—'}) ${tech.technical_signal || ''}
+MA: ${tech.price_vs_ma50_pct != null ? tech.price_vs_ma50_pct.toFixed(1) + '% vs 50MA' : '?'} · ${tech.price_vs_ma200_pct != null ? tech.price_vs_ma200_pct.toFixed(1) + '% vs 200MA' : '?'}${tech.golden_cross ? ' ⭐ GOLDEN CROSS' : tech.death_cross ? ' 💀 DEATH CROSS' : ''}
+RSI(14): ${tech.rsi_14 != null ? tech.rsi_14.toFixed(1) : '?'} (${tech.rsi_signal || '?'}) | MACD: ${tech.macd_trend || '?'} | Stoch: ${tech.stoch_signal || '?'}
+Bollinger: ${tech.bollinger_position || '?'} | Volume: ${tech.volume_ratio != null ? tech.volume_ratio.toFixed(1) + 'x avg' : '?'} | OBV: ${tech.obv_trend || '?'}
+Support: ${tech.nearest_support != null ? '$' + tech.nearest_support.toFixed(2) : '?'} | Resistance: ${tech.nearest_resistance != null ? '$' + tech.nearest_resistance.toFixed(2) : '?'}
+Bull signals: ${tech.bull_signals || 0} | Bear signals: ${tech.bear_signals || 0}` : '';
   return `Equity analyst. Predict earnings beat/miss for:
 ${ticker} (${company}) | ${fiscalQuarter || 'Q?'} | ${reportDate} ${reportTime || ''}
 ${lines.join(' | ')}
 
 Recent headlines (Yahoo Finance):
 ${newsSection}
+${techSection}
 
 JSON only, no markdown, no explanation:
-{"signal":"BUY","confidence":72,"beatProbability":68,"sentiment":"POSITIVE","newsSentiment":"POSITIVE","analystTrend":"STABLE","summary":"2 sentences specific to this company based on the data above.","keyFactors":["factor 1","factor 2","factor 3"],"risks":["risk 1","risk 2"]}`;
+{"signal":"BUY","confidence":72,"beatProbability":68,"sentiment":"POSITIVE","newsSentiment":"POSITIVE","analystTrend":"STABLE","technicalView":"CONFIRMS_BULLISH","technicalNote":"one sentence on technical setup for earnings reaction","summary":"2 sentences specific to this company based on the data above.","keyFactors":["factor 1","factor 2","factor 3"],"risks":["risk 1","risk 2"]}`;
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -174,8 +184,11 @@ async function analyzeEarning(earning) {
     return { error: 'daily_quota_exhausted', ticker: earning.ticker };
   }
 
-  const headlines = await fetchYahooContext(earning.ticker);
-  const prompt = buildPrompt(earning, headlines);
+  const [headlines, tech] = await Promise.all([
+    fetchYahooContext(earning.ticker),
+    getFromDB(earning.ticker).catch(() => null),
+  ]);
+  const prompt = buildPrompt(earning, headlines, tech);
 
   try {
     const rawText = await callGemini(prompt, apiKey);
@@ -195,6 +208,8 @@ async function analyzeEarning(earning) {
       summary: parsed.summary || '',
       keyFactors: Array.isArray(parsed.keyFactors) ? parsed.keyFactors.slice(0, 5) : [],
       risks: Array.isArray(parsed.risks) ? parsed.risks.slice(0, 4) : [],
+      technicalView: ['CONFIRMS_BULLISH','CONFIRMS_BEARISH','DIVERGES','NEUTRAL'].includes(parsed.technicalView) ? parsed.technicalView : null,
+      technicalNote: parsed.technicalNote || null,
       model: GEMINI_MODEL,
     };
 
