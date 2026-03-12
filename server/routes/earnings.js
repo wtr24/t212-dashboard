@@ -39,6 +39,33 @@ router.get('/month', async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+router.get('/yesterday', async (req, res) => {
+  try {
+    const { rows } = await query(
+      `SELECT * FROM earnings_calendar
+       WHERE report_date = CURRENT_DATE - INTERVAL '1 day'
+       ORDER BY
+         CASE WHEN eps_actual IS NOT NULL THEN 0 ELSE 1 END,
+         ABS(COALESCE(eps_surprise_pct, 0)) DESC NULLS LAST,
+         market_cap DESC NULLS LAST`
+    ).catch(() => ({ rows: [] }));
+    const total = rows.length;
+    const reported = rows.filter(r => r.eps_actual != null).length;
+    const beats = rows.filter(r => r.eps_surprise_pct > 0).length;
+    const misses = rows.filter(r => r.eps_surprise_pct != null && r.eps_surprise_pct <= 0).length;
+    const surprises = rows.filter(r => r.eps_surprise_pct != null).map(r => r.eps_surprise_pct);
+    const avgSurprise = surprises.length ? surprises.reduce((a, b) => a + b, 0) / surprises.length : null;
+    res.json({ data: rows, summary: { total, reported, beats, misses, pending: total - reported, avgSurprisePct: avgSurprise } });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/actuals-status', async (req, res) => {
+  try {
+    const { getPollStatus } = require('../scrapers/earningsActuals');
+    res.json(getPollStatus());
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/history', async (req, res) => {
   try {
     const weeks = parseInt(req.query.weeks) || 8;

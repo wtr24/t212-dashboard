@@ -81,6 +81,42 @@ function BeatBar({ probability }) {
   );
 }
 
+function YesterdayCard({ e }) {
+  const beat = e.eps_surprise_pct > 0;
+  const reported = e.eps_actual != null;
+  const borderColor = !reported ? 'var(--border)' : beat ? 'rgba(16,185,129,0.4)' : 'rgba(239,68,68,0.4)';
+  const fmtRevLocal = v => { if (!v) return null; const n = Number(v); if (n >= 1e12) return `$${(n/1e12).toFixed(2)}T`; if (n >= 1e9) return `$${(n/1e9).toFixed(1)}B`; if (n >= 1e6) return `$${(n/1e6).toFixed(0)}M`; return `$${n}`; };
+  return (
+    <div style={{ background: 'var(--surface)', border: `1px solid ${borderColor}`, borderRadius: 14, padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      <StockLogo ticker={e.ticker} size="sm" />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{e.ticker}</span>
+          {e.company && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>{e.company}</span>}
+          <TimeBadge time={e.report_time} />
+        </div>
+        {reported ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, color: 'var(--text-3)' }}>EPS: <span style={{ fontFamily: 'JetBrains Mono, monospace', color: 'var(--text)', fontWeight: 600 }}>${e.eps_actual?.toFixed(2)}</span> vs est <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>${e.eps_estimate?.toFixed(2)}</span></span>
+            {e.eps_surprise_pct != null && <SurprisePill surprise={e.eps_surprise} surprisePct={e.eps_surprise_pct} />}
+            {e.revenue_actual && <span style={{ fontSize: 11, color: 'var(--text-3)' }}>Rev: <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, color: 'var(--text)' }}>{fmtRevLocal(e.revenue_actual)}</span></span>}
+          </div>
+        ) : (
+          <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 4 }}>Results pending</div>
+        )}
+      </div>
+      {reported && (
+        <span style={{ fontSize: 11, fontWeight: 800, color: beat ? '#10b981' : '#ef4444', background: beat ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', padding: '4px 10px', borderRadius: 6, flexShrink: 0 }}>
+          {beat ? 'BEAT' : 'MISS'}
+        </span>
+      )}
+      {!reported && (
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-3)', background: 'var(--surface-2)', padding: '4px 10px', borderRadius: 6, flexShrink: 0 }}>PENDING</span>
+      )}
+    </div>
+  );
+}
+
 function AnalystRecommendationPill({ rec }) {
   if (!rec) return null;
   const label = capRec(rec);
@@ -393,7 +429,7 @@ function EarningsCard({ e, expanded, onToggle }) {
   );
 }
 
-function TodayView({ data, expanded, setExpanded }) {
+function TodayView({ data, expanded, setExpanded, pollStatus }) {
   const bmo = data.filter(e => e.report_time === 'BMO');
   const amc = data.filter(e => e.report_time === 'AMC');
   const other = data.filter(e => !['BMO','AMC'].includes(e.report_time));
@@ -416,6 +452,13 @@ function TodayView({ data, expanded, setExpanded }) {
 
   return (
     <>
+      {pollStatus && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-3)', marginBottom: 16 }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: pollStatus.isMarketHours ? '#10b981' : '#475569', display: 'inline-block', boxShadow: pollStatus.isMarketHours ? '0 0 0 2px rgba(16,185,129,0.25)' : 'none' }} />
+          {pollStatus.isMarketHours ? 'Checking for results every 5 min' : 'Results check paused (out of market hours)'}
+          {pollStatus.lastPollAt && <span>· Last: {new Date(pollStatus.lastPollAt).toLocaleTimeString()}</span>}
+        </div>
+      )}
       <Section title="Before Market Open" items={bmo} />
       <Section title="After Market Close" items={amc} />
       <Section title="Time TBD" items={other} />
@@ -465,15 +508,42 @@ function WeekView({ data, expanded, setExpanded }) {
   );
 }
 
-function HistoryView({ data }) {
-  if (!data.length) return (
+function HistoryView({ data, yesterday }) {
+  if (!data.length && !(yesterday && yesterday.data && yesterday.data.length > 0)) return (
     <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--text-3)' }}>
       <div style={{ fontSize: 15, fontWeight: 600 }}>No historical earnings yet</div>
     </div>
   );
 
   return (
-    <div style={{ overflowX: 'auto' }}>
+    <div>
+      {yesterday && yesterday.data && yesterday.data.length > 0 && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text)' }}>Yesterday's Results</div>
+            {yesterday.summary && (
+              <div style={{ display: 'flex', gap: 16, fontSize: 11, color: 'var(--text-3)', flexWrap: 'wrap' }}>
+                <span>{yesterday.summary.reported}/{yesterday.summary.total} reported</span>
+                <span style={{ color: '#10b981' }}>▲ {yesterday.summary.beats} beat</span>
+                <span style={{ color: '#ef4444' }}>▼ {yesterday.summary.misses} missed</span>
+                {yesterday.summary.avgSurprisePct != null && (
+                  <span style={{ color: yesterday.summary.avgSurprisePct >= 0 ? '#10b981' : '#ef4444', fontWeight: 600 }}>
+                    Avg surprise: {yesterday.summary.avgSurprisePct >= 0 ? '+' : ''}{yesterday.summary.avgSurprisePct.toFixed(1)}%
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {yesterday.data.slice(0, 20).map(e => <YesterdayCard key={e.ticker} e={e} />)}
+          </div>
+          {yesterday.data.length > 20 && (
+            <div style={{ fontSize: 12, color: 'var(--text-3)', textAlign: 'center', marginTop: 8 }}>+{yesterday.data.length - 20} more</div>
+          )}
+          <div style={{ height: 1, background: 'var(--border)', margin: '20px 0' }} />
+        </div>
+      )}
+      {!data.length ? null : <div style={{ overflowX: 'auto' }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 700 }}>
         <thead>
           <tr>
@@ -514,6 +584,7 @@ function HistoryView({ data }) {
           })}
         </tbody>
       </table>
+    </div>}
     </div>
   );
 }
@@ -526,6 +597,8 @@ export default function Earnings() {
   const [scrapeStatus, setScrapeStatus] = useState(null);
   const [aiStatus, setAiStatus] = useState(null);
   const [expanded, setExpanded] = useState(null);
+  const [yesterday, setYesterday] = useState(null);
+  const [pollStatus, setPollStatus] = useState(null);
 
   const fetchData = useCallback(async (view) => {
     setLoading(true);
@@ -549,6 +622,17 @@ export default function Earnings() {
   }, []);
 
   useEffect(() => { fetchData(tab); }, [tab, fetchData]);
+
+  useEffect(() => {
+    fetch(`${BASE}/earnings/yesterday`)
+      .then(r => r.json())
+      .then(d => setYesterday(d))
+      .catch(() => {});
+    fetch(`${BASE}/earnings/actuals-status`)
+      .then(r => r.json())
+      .then(d => setPollStatus(d))
+      .catch(() => {});
+  }, []);
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -613,7 +697,7 @@ export default function Earnings() {
       ) : (
         <AnimatePresence mode="wait">
           <motion.div key={tab} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }}>
-            {tab === 'today' && <TodayView data={data.today || []} expanded={expanded} setExpanded={setExpanded} />}
+            {tab === 'today' && <TodayView data={data.today || []} expanded={expanded} setExpanded={setExpanded} pollStatus={pollStatus} />}
             {tab === 'week' && <WeekView data={data.week || {}} expanded={expanded} setExpanded={setExpanded} />}
             {tab === 'month' && (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 10 }}>
@@ -621,7 +705,7 @@ export default function Earnings() {
                 {!(data.month || []).length && <div style={{ color: 'var(--text-3)', padding: 40, gridColumn: '1/-1', textAlign: 'center' }}>No earnings this month</div>}
               </div>
             )}
-            {tab === 'history' && <HistoryView data={data.history || []} />}
+            {tab === 'history' && <HistoryView data={data.history || []} yesterday={yesterday} />}
           </motion.div>
         </AnimatePresence>
       )}

@@ -93,6 +93,11 @@ function startJobs() {
       }
     } catch (e) { console.error('[TA] cron failed:', e.message); }
   });
+  // Earnings actuals: poll every 5 min during market hours Mon-Fri 7am-8pm London
+  cron.schedule('*/5 7-20 * * 1-5', async () => {
+    const { pollEarningsActuals } = require('../scrapers/earningsActuals');
+    pollEarningsActuals().catch(e => console.error('[actuals cron]', e.message));
+  });
   console.log('Refresh jobs started');
 }
 

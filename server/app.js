@@ -98,6 +98,10 @@ initDB().then(async () => {
     const { scheduleEarningsDiscordJob } = require('./jobs/earningsDiscordJob');
     scheduleEarningsDiscordJob().catch(e => console.error('[discord earnings] Schedule failed:', e.message));
   }, 28000);
+  setTimeout(async () => {
+    const { warmPortfolioCache } = require('./utils/cacheWarmer');
+    warmPortfolioCache().catch(e => console.error('[cache warmer]', e.message));
+  }, 35000);
 }).catch(err => {
   console.error('DB init failed:', err.message);
   app.listen(PORT, () => console.log(`Server running on port ${PORT} (no DB)`));
