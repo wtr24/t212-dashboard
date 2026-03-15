@@ -205,7 +205,7 @@ export default function Dashboard() {
       axios.get(API + '/api/decisions/portfolio'),
       axios.get(API + '/api/decisions/macro'),
       axios.get(API + '/api/earnings/today'),
-      axios.get(API + '/api/congress?limit=5'),
+      axios.get(API + '/api/congress/trades?limit=5'),
     ]);
     if (portR.status === 'fulfilled') setPortfolio(portR.value.data);
     if (macroR.status === 'fulfilled') setMacro(macroR.value.data.macro);
