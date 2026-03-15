@@ -18,6 +18,7 @@ import Watchlist from './pages/Watchlist';
 import Screener from './pages/Screener';
 import MarketHub from './pages/MarketHub';
 import Journal from './pages/Journal';
+import PaperTrading from './pages/PaperTrading';
 
 function ResearchSearch() {
   const [q, setQ] = useState('');
@@ -77,6 +78,7 @@ function AnimatedRoutes() {
           <Route path="/screener" element={<Screener />} />
           <Route path="/market" element={<MarketHub />} />
           <Route path="/journal" element={<Journal />} />
+          <Route path="/paper" element={<PaperTrading />} />
           <Route path="/research" element={<ResearchSearch />} />
           <Route path="/research/:ticker" element={<Research />} />
           <Route path="/history" element={<History />} />

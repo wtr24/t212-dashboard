@@ -397,6 +397,65 @@ async function initDB() {
     );
     CREATE INDEX IF NOT EXISTS idx_journal_ticker ON trading_journal(ticker);
     CREATE INDEX IF NOT EXISTS idx_journal_date ON trading_journal(entry_date DESC);
+
+    CREATE TABLE IF NOT EXISTS paper_portfolios (
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      strategy_type VARCHAR(50),
+      risk_level INT,
+      starting_value DECIMAL DEFAULT 0,
+      current_value DECIMAL DEFAULT 0,
+      cash DECIMAL DEFAULT 0,
+      total_return_pct DECIMAL DEFAULT 0,
+      total_trades INT DEFAULT 0,
+      winning_trades INT DEFAULT 0,
+      description TEXT,
+      rules JSONB,
+      created_at TIMESTAMP DEFAULT NOW(),
+      last_updated TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS paper_positions (
+      id SERIAL PRIMARY KEY,
+      portfolio_id INT REFERENCES paper_portfolios(id) ON DELETE CASCADE,
+      ticker VARCHAR(20),
+      company VARCHAR(200),
+      quantity DECIMAL DEFAULT 0,
+      avg_cost DECIMAL,
+      current_price DECIMAL,
+      current_value DECIMAL,
+      unrealised_pnl DECIMAL,
+      unrealised_pnl_pct DECIMAL,
+      opened_at TIMESTAMP DEFAULT NOW(),
+      last_updated TIMESTAMP DEFAULT NOW(),
+      UNIQUE(portfolio_id, ticker)
+    );
+
+    CREATE TABLE IF NOT EXISTS paper_trades (
+      id SERIAL PRIMARY KEY,
+      portfolio_id INT REFERENCES paper_portfolios(id) ON DELETE CASCADE,
+      ticker VARCHAR(20),
+      action VARCHAR(10),
+      quantity DECIMAL,
+      price DECIMAL,
+      total_value DECIMAL,
+      signal_confidence INT,
+      signal_type VARCHAR(20),
+      reason TEXT,
+      strategy_rule VARCHAR(100),
+      executed_at TIMESTAMP DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS paper_snapshots (
+      id SERIAL PRIMARY KEY,
+      portfolio_id INT REFERENCES paper_portfolios(id) ON DELETE CASCADE,
+      snapshot_date DATE DEFAULT CURRENT_DATE,
+      total_value DECIMAL,
+      cash DECIMAL,
+      return_pct DECIMAL,
+      daily_change_pct DECIMAL,
+      UNIQUE(portfolio_id, snapshot_date)
+    );
   `);
 }
 

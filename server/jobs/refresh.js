@@ -103,6 +103,12 @@ function startJobs() {
     const { pollEarningsActuals } = require('../scrapers/earningsActuals');
     pollEarningsActuals().catch(e => console.error('[actuals cron]', e.message));
   });
+  // Paper trading: run daily at 5pm London Mon-Fri
+  cron.schedule('0 17 * * 1-5', async () => {
+    const { runDailySimulation } = require('../services/paperTrading');
+    console.log('[paper] Running scheduled daily simulation...');
+    runDailySimulation().catch(e => console.error('[paper] Simulation failed:', e.message));
+  }, { timezone: 'Europe/London' });
   console.log('Refresh jobs started');
 }
 

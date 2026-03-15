@@ -219,7 +219,7 @@ async function generatePortfolioDecision() {
 
   const { getPortfolio } = require('./t212');
   let positions = [];
-  try { positions = await getPortfolio() || []; } catch {}
+  try { const r = await getPortfolio(); positions = r?.data || r || []; } catch {}
 
   if (!positions.length) return { decisions: [], summary: { overallAction: 'NO_DATA', highRiskPositions: 0, strongBuys: 0, strongSells: 0, avgConfidence: 0 } };
 

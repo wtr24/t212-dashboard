@@ -39,6 +39,7 @@ app.use('/api/technical', require('./routes/technical'));
 app.use('/api/research', require('./routes/research'));
 app.use('/api/decisions', require('./routes/decisions'));
 app.use('/api/journal', require('./routes/journal'));
+app.use('/api/paper', require('./routes/paperTrading'));
 app.use('/api/admin', require('./routes/admin'));
 
 // Settings CRUD
@@ -109,6 +110,11 @@ initDB().then(async () => {
     const { warmPortfolioCache } = require('./utils/cacheWarmer');
     warmPortfolioCache().catch(e => console.error('[cache warmer]', e.message));
   }, 35000);
+  setTimeout(async () => {
+    const { initPaperPortfolios } = require('./services/paperTrading');
+    console.log('[paper] Initialising paper portfolios...');
+    initPaperPortfolios().catch(e => console.error('[paper] Init failed:', e.message));
+  }, 40000);
 }).catch(err => {
   console.error('DB init failed:', err.message);
   app.listen(PORT, () => console.log(`Server running on port ${PORT} (no DB)`));
