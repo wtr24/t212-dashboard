@@ -37,6 +37,8 @@ app.use('/api/stocks', require('./routes/stocks'));
 app.use('/api/earnings', require('./routes/earnings'));
 app.use('/api/technical', require('./routes/technical'));
 app.use('/api/research', require('./routes/research'));
+app.use('/api/decisions', require('./routes/decisions'));
+app.use('/api/journal', require('./routes/journal'));
 app.use('/api/admin', require('./routes/admin'));
 
 // Settings CRUD
@@ -99,6 +101,10 @@ initDB().then(async () => {
     const { scheduleEarningsDiscordJob } = require('./jobs/earningsDiscordJob');
     scheduleEarningsDiscordJob().catch(e => console.error('[discord earnings] Schedule failed:', e.message));
   }, 28000);
+  setTimeout(async () => {
+    const { scheduleAlertsJob } = require('./jobs/alertsJob');
+    scheduleAlertsJob();
+  }, 32000);
   setTimeout(async () => {
     const { warmPortfolioCache } = require('./utils/cacheWarmer');
     warmPortfolioCache().catch(e => console.error('[cache warmer]', e.message));

@@ -371,6 +371,32 @@ async function initDB() {
       last_request_at TIMESTAMP,
       PRIMARY KEY (api_name, date)
     );
+
+    CREATE TABLE IF NOT EXISTS trading_journal (
+      id SERIAL PRIMARY KEY,
+      ticker VARCHAR(20) NOT NULL,
+      action VARCHAR(10) NOT NULL,
+      entry_price DECIMAL,
+      quantity DECIMAL,
+      entry_date DATE NOT NULL DEFAULT CURRENT_DATE,
+      exit_price DECIMAL,
+      exit_date DATE,
+      thesis TEXT,
+      signal_at_entry VARCHAR(20),
+      confidence_at_entry INT,
+      evidence_at_entry JSONB,
+      stop_loss DECIMAL,
+      target_price DECIMAL,
+      outcome VARCHAR(20),
+      pnl DECIMAL,
+      pnl_pct DECIMAL,
+      notes TEXT,
+      tags VARCHAR(100)[],
+      created_at TIMESTAMP DEFAULT NOW(),
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_journal_ticker ON trading_journal(ticker);
+    CREATE INDEX IF NOT EXISTS idx_journal_date ON trading_journal(entry_date DESC);
   `);
 }
 

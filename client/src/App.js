@@ -14,6 +14,10 @@ import CongressTracker from './pages/CongressTracker';
 import InsiderTracker from './pages/InsiderTracker';
 import Earnings from './pages/Earnings';
 import Research from './pages/Research';
+import Watchlist from './pages/Watchlist';
+import Screener from './pages/Screener';
+import MarketHub from './pages/MarketHub';
+import Journal from './pages/Journal';
 
 function ResearchSearch() {
   const [q, setQ] = useState('');
@@ -69,6 +73,10 @@ function AnimatedRoutes() {
           <Route path="/congress" element={<CongressTracker />} />
           <Route path="/insider" element={<InsiderTracker />} />
           <Route path="/earnings" element={<Earnings />} />
+          <Route path="/watchlist" element={<Watchlist />} />
+          <Route path="/screener" element={<Screener />} />
+          <Route path="/market" element={<MarketHub />} />
+          <Route path="/journal" element={<Journal />} />
           <Route path="/research" element={<ResearchSearch />} />
           <Route path="/research/:ticker" element={<Research />} />
           <Route path="/history" element={<History />} />

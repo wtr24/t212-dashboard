@@ -1,19 +1,42 @@
 import { NavLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutDashboard, TrendingUp, BarChart3, Brain, Building2, Eye, History, Coins, Settings, CalendarDays, Search } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, BarChart3, Brain, Building2, Eye, History, Coins, Settings, CalendarDays, Search, Globe, SlidersHorizontal, BookOpen } from 'lucide-react';
 
-const nav = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/positions', label: 'Positions', icon: TrendingUp },
-  { to: '/charts', label: 'Charts', icon: BarChart3 },
-  { to: '/predictions', label: 'AI Signals', icon: Brain },
-  { to: '/congress', label: 'Congress', icon: Building2 },
-  { to: '/insider', label: 'Insider', icon: Eye },
-  { to: '/earnings', label: 'Earnings', icon: CalendarDays },
-  { to: '/research', label: 'Research', icon: Search },
-  { to: '/history', label: 'History', icon: History },
-  { to: '/dividends', label: 'Dividends', icon: Coins },
-  { to: '/settings', label: 'Settings', icon: Settings },
+const navGroups = [
+  {
+    label: 'PORTFOLIO',
+    items: [
+      { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+      { to: '/positions', label: 'Positions', icon: TrendingUp },
+      { to: '/history', label: 'History', icon: History },
+      { to: '/dividends', label: 'Dividends', icon: Coins },
+    ],
+  },
+  {
+    label: 'INTELLIGENCE',
+    items: [
+      { to: '/watchlist', label: 'Watchlist', icon: Eye },
+      { to: '/screener', label: 'Screener', icon: SlidersHorizontal },
+      { to: '/charts', label: 'Charts', icon: BarChart3 },
+      { to: '/predictions', label: 'AI Signals', icon: Brain },
+    ],
+  },
+  {
+    label: 'MARKET',
+    items: [
+      { to: '/market', label: 'Market Hub', icon: Globe },
+      { to: '/earnings', label: 'Earnings', icon: CalendarDays },
+      { to: '/congress', label: 'Congress', icon: Building2 },
+      { to: '/insider', label: 'Insider', icon: Search },
+    ],
+  },
+  {
+    label: 'TOOLS',
+    items: [
+      { to: '/journal', label: 'Journal', icon: BookOpen },
+      { to: '/settings', label: 'Settings', icon: Settings },
+    ],
+  },
 ];
 
 export default function Sidebar() {
