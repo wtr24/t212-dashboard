@@ -35,11 +35,16 @@ router.get('/positions', async (req, res) => {
       analyseTop10(positions, enriched),
     ]);
     res.json({
-      positions: enriched.map(pos => ({
-        ...pos,
-        sentiment: sentiment.find(s => s.ticker === pos.ticker),
-        analysis: analysis.find(a => a.ticker === pos.ticker),
-      })),
+      positions: enriched.map(pos => {
+        const cost = (pos.averagePrice || 0) * (pos.quantity || 1);
+        const pplPercentage = cost > 0 ? Math.round((pos.ppl / cost) * 1000) / 10 : 0;
+        return {
+          ...pos,
+          pplPercentage,
+          sentiment: sentiment.find(s => s.ticker === pos.ticker),
+          analysis: analysis.find(a => a.ticker === pos.ticker),
+        };
+      }),
       source: portfolioResult.source,
       age: portfolioResult.age,
     });

@@ -233,7 +233,17 @@ async function generatePortfolioDecision() {
     if (sig.signal.includes('SELL') && (pos?.ppl || 0) > 0) derivedAction = 'Consider taking profit';
     if (sig.signal.includes('SELL') && (pos?.ppl || 0) < 0) derivedAction = 'Cut losses';
     if (sig.signal.includes('BUY') && (pos?.ppl || 0) < -10) derivedAction = 'Consider averaging down';
-    return { ...sig, position: pos, derivedAction };
+    // Enrich position with computed fields
+    const cost = (pos?.averagePrice || 0) * (pos?.quantity || 1);
+    const pplPercentage = cost > 0 ? (pos.ppl / cost) * 100 : 0;
+    const enrichedPos = pos ? { ...pos, pplPercentage: Math.round(pplPercentage * 10) / 10 } : pos;
+    // Fall back price object from position market data if Yahoo returned null
+    const price = sig.price || (pos?.currentPrice ? {
+      price: pos.currentPrice,
+      change: pos.market?.currentPrice != null && pos.market?.previousClose != null ? pos.market.currentPrice - pos.market.previousClose : null,
+      changePercent: pos.market?.currentPrice != null && pos.market?.previousClose != null ? ((pos.market.currentPrice - pos.market.previousClose) / pos.market.previousClose) * 100 : null,
+    } : null);
+    return { ...sig, price, position: enrichedPos, derivedAction };
   });
 
   const sells = decisions.filter(d => d.signal.includes('SELL'));
