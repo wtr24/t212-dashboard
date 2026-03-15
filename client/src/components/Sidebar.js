@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { LayoutDashboard, TrendingUp, BarChart3, Brain, Building2, Eye, History, Coins, Settings, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, TrendingUp, BarChart3, Brain, Building2, Eye, History, Coins, Settings, CalendarDays, Search } from 'lucide-react';
 
 const nav = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -10,6 +10,7 @@ const nav = [
   { to: '/congress', label: 'Congress', icon: Building2 },
   { to: '/insider', label: 'Insider', icon: Eye },
   { to: '/earnings', label: 'Earnings', icon: CalendarDays },
+  { to: '/research', label: 'Research', icon: Search },
   { to: '/history', label: 'History', icon: History },
   { to: '/dividends', label: 'Dividends', icon: Coins },
   { to: '/settings', label: 'Settings', icon: Settings },

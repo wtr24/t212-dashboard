@@ -1,4 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import Sidebar from './components/Sidebar';
 import Topbar from './components/Topbar';
@@ -12,6 +13,35 @@ import Settings from './pages/Settings';
 import CongressTracker from './pages/CongressTracker';
 import InsiderTracker from './pages/InsiderTracker';
 import Earnings from './pages/Earnings';
+import Research from './pages/Research';
+
+function ResearchSearch() {
+  const [q, setQ] = useState('');
+  const nav = useNavigate();
+  const popular = ['AAPL', 'NVDA', 'MSFT', 'TSLA', 'AMZN', 'META', 'GOOGL'];
+  const go = (t) => { if (t.trim()) nav('/research/' + t.trim().toUpperCase()); };
+  return (
+    <div style={{ maxWidth: 560, margin: '80px auto 0', textAlign: 'center' }}>
+      <div style={{ fontSize: 28, fontWeight: 700, color: '#f1f5f9', marginBottom: 8 }}>Stock Research</div>
+      <div style={{ fontSize: 14, color: '#64748b', marginBottom: 32 }}>AI-powered analysis · earnings · technicals · news · insider activity</div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input
+          value={q} onChange={e => setQ(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && go(q)}
+          placeholder="Enter ticker symbol (e.g. AAPL)"
+          style={{ flex: 1, padding: '12px 16px', borderRadius: 10, background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#f1f5f9', fontSize: 15, outline: 'none', fontFamily: 'JetBrains Mono, monospace' }}
+          autoFocus
+        />
+        <button onClick={() => go(q)} style={{ padding: '12px 20px', borderRadius: 10, background: '#3b82f6', border: 'none', color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Search</button>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center', marginTop: 24 }}>
+        {popular.map(t => (
+          <button key={t} onClick={() => go(t)} style={{ padding: '6px 14px', borderRadius: 20, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.25)', color: '#93c5fd', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'JetBrains Mono, monospace' }}>{t}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function NotFound() {
   return (
@@ -39,6 +69,8 @@ function AnimatedRoutes() {
           <Route path="/congress" element={<CongressTracker />} />
           <Route path="/insider" element={<InsiderTracker />} />
           <Route path="/earnings" element={<Earnings />} />
+          <Route path="/research" element={<ResearchSearch />} />
+          <Route path="/research/:ticker" element={<Research />} />
           <Route path="/history" element={<History />} />
           <Route path="/dividends" element={<Dividends />} />
           <Route path="/settings" element={<Settings />} />

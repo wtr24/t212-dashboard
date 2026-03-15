@@ -36,6 +36,7 @@ app.use('/api/insider', require('./routes/insider'));
 app.use('/api/stocks', require('./routes/stocks'));
 app.use('/api/earnings', require('./routes/earnings'));
 app.use('/api/technical', require('./routes/technical'));
+app.use('/api/research', require('./routes/research'));
 app.use('/api/admin', require('./routes/admin'));
 
 // Settings CRUD
