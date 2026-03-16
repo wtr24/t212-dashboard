@@ -443,6 +443,7 @@ async function initDB() {
       signal_type VARCHAR(20),
       reason TEXT,
       strategy_rule VARCHAR(100),
+      pnl DECIMAL DEFAULT 0,
       executed_at TIMESTAMP DEFAULT NOW()
     );
 
@@ -456,6 +457,12 @@ async function initDB() {
       daily_change_pct DECIMAL,
       UNIQUE(portfolio_id, snapshot_date)
     );
+
+    CREATE INDEX IF NOT EXISTS idx_paper_trades_portfolio ON paper_trades(portfolio_id, executed_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_paper_snapshots_portfolio ON paper_snapshots(portfolio_id, snapshot_date);
+    CREATE INDEX IF NOT EXISTS idx_paper_positions_portfolio ON paper_positions(portfolio_id);
+
+    ALTER TABLE paper_trades ADD COLUMN IF NOT EXISTS pnl DECIMAL DEFAULT 0;
   `);
 }
 

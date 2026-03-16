@@ -3,144 +3,161 @@ const router = express.Router();
 const { query } = require('../models/db');
 const { initPaperPortfolios, runDailySimulation } = require('../services/paperTrading');
 
-// All portfolios sorted by return
+async function getRealReturnPct() {
+  try {
+    const t212 = require('../services/t212');
+    const [summaryResult, portfolioResult] = await Promise.all([
+      t212.getAccountSummary(),
+      t212.getPortfolio(),
+    ]);
+    const metrics = t212.calcMetrics(portfolioResult.data, summaryResult.data);
+    return parseFloat(metrics.returnPct || 0);
+  } catch(e) {
+    return 0;
+  }
+}
+
 router.get('/portfolios', async (req, res) => {
   try {
-    const { rows } = await query(`
+    const portfolios = await query(`
       SELECT pp.*,
-        (SELECT COUNT(*) FROM paper_trades pt WHERE pt.portfolio_id=pp.id) as trade_count,
-        (SELECT COUNT(*) FROM paper_positions pos WHERE pos.portfolio_id=pp.id) as position_count
+        (SELECT COUNT(*) FROM paper_positions WHERE portfolio_id=pp.id AND quantity>0) as position_count,
+        (SELECT COUNT(*) FROM paper_trades WHERE portfolio_id=pp.id) as trade_count,
+        CASE WHEN pp.total_trades > 0
+          THEN ROUND(pp.winning_trades::numeric / pp.total_trades * 100, 1)
+          ELSE 0 END as win_rate
       FROM paper_portfolios pp
-      ORDER BY total_return_pct DESC
+      ORDER BY pp.total_return_pct DESC NULLS LAST
     `);
-    const ranked = rows.map((r, i) => ({ ...r, rank: i + 1 }));
-    res.json(ranked);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+
+    const realReturnPct = await getRealReturnPct();
+
+    const ranked = portfolios.rows.map((p, i) => ({
+      ...p,
+      rank: i + 1,
+      beating_real: parseFloat(p.total_return_pct || 0) > realReturnPct,
+      vs_real_pct: (parseFloat(p.total_return_pct || 0) - realReturnPct).toFixed(2)
+    }));
+
+    res.json({ data: ranked, realReturnPct, count: ranked.length });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Leaderboard: top 10 + bottom 10
-router.get('/leaderboard', async (req, res) => {
-  try {
-    const { rows } = await query(`
-      SELECT pp.id, pp.name, pp.strategy_type, pp.risk_level, pp.current_value,
-             pp.total_return_pct, pp.total_trades, pp.winning_trades,
-             pp.starting_value, pp.last_updated,
-             CASE WHEN pp.total_trades > 0 THEN ROUND(pp.winning_trades::decimal/pp.total_trades*100) ELSE 0 END as win_rate
-      FROM paper_portfolios pp
-      ORDER BY total_return_pct DESC
-    `);
-    const ranked = rows.map((r, i) => ({ ...r, rank: i + 1 }));
-    res.json({
-      top10: ranked.slice(0, 10),
-      bottom10: ranked.slice(-10).reverse(),
-      all: ranked,
-      count: ranked.length,
-    });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Individual portfolio detail
 router.get('/portfolios/:id', async (req, res) => {
   try {
     const id = req.params.id;
-    const [portR, posR, tradesR, snapR] = await Promise.all([
+    const [portfolio, positions, trades, snapshots] = await Promise.all([
       query('SELECT * FROM paper_portfolios WHERE id=$1', [id]),
-      query('SELECT * FROM paper_positions WHERE portfolio_id=$1 ORDER BY current_value DESC', [id]),
-      query('SELECT * FROM paper_trades WHERE portfolio_id=$1 ORDER BY executed_at DESC LIMIT 20', [id]),
-      query('SELECT * FROM paper_snapshots WHERE portfolio_id=$1 ORDER BY snapshot_date ASC', [id]),
+      query('SELECT * FROM paper_positions WHERE portfolio_id=$1 ORDER BY current_value DESC NULLS LAST', [id]),
+      query('SELECT * FROM paper_trades WHERE portfolio_id=$1 ORDER BY executed_at DESC LIMIT 50', [id]),
+      query('SELECT * FROM paper_snapshots WHERE portfolio_id=$1 ORDER BY snapshot_date ASC', [id])
     ]);
-    if (!portR.rows.length) return res.status(404).json({ error: 'Not found' });
-    const port = portR.rows[0];
-    const winRate = port.total_trades > 0 ? Math.round(port.winning_trades / port.total_trades * 100) : 0;
+    if (!portfolio.rows[0]) return res.status(404).json({ error: 'not found' });
+    const trades_arr = trades.rows;
+    const wins = trades_arr.filter(t => t.action==='SELL' && parseFloat(t.pnl||0) > 0).length;
+    const losses = trades_arr.filter(t => t.action==='SELL' && parseFloat(t.pnl||0) <= 0).length;
+    const totalPnl = trades_arr.filter(t=>t.action==='SELL').reduce((s,t)=>s+parseFloat(t.pnl||0),0);
     res.json({
-      portfolio: { ...port, winRate },
-      positions: posR.rows,
-      recentTrades: tradesR.rows,
-      snapshots: snapR.rows,
+      portfolio: portfolio.rows[0],
+      positions: positions.rows,
+      trades: trades_arr,
+      recentTrades: trades_arr,
+      snapshots: snapshots.rows,
+      stats: { wins, losses, winRate: wins+losses > 0 ? (wins/(wins+losses)*100).toFixed(1) : 0, totalPnl: totalPnl.toFixed(2) }
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Strategy analysis: grouped by type
+router.get('/leaderboard', async (req, res) => {
+  try {
+    const all = await query(`
+      SELECT id, name, strategy_type, risk_level, current_value, starting_value,
+             total_return_pct, total_trades, winning_trades,
+             CASE WHEN total_trades > 0 THEN ROUND(winning_trades::numeric/total_trades*100) ELSE 0 END as win_rate
+      FROM paper_portfolios
+      ORDER BY total_return_pct DESC NULLS LAST
+    `);
+    const ranked = all.rows.map((r, i) => ({ ...r, rank: i + 1 }));
+    res.json({ top10: ranked.slice(0,10), bottom10: ranked.slice(-10).reverse(), all: ranked, total: ranked.length, count: ranked.length });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/comparison', async (req, res) => {
+  try {
+    const portfolios = await query('SELECT name, strategy_type, risk_level, total_return_pct FROM paper_portfolios ORDER BY total_return_pct DESC');
+    const realReturn = await getRealReturnPct();
+    const rank = portfolios.rows.filter(p => parseFloat(p.total_return_pct||0) > realReturn).length + 1;
+    res.json({ yourReturn: realReturn, yourRank: rank, totalPortfolios: portfolios.rows.length+1, portfolios: portfolios.rows });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/strategy-analysis', async (req, res) => {
   try {
-    const { rows } = await query(`
-      SELECT strategy_type, risk_level,
-        AVG(total_return_pct) as avg_return,
-        MAX(total_return_pct) as best_return,
-        MIN(total_return_pct) as worst_return,
+    const data = await query(`
+      SELECT strategy_type,
         COUNT(*) as count,
-        AVG(CASE WHEN total_trades > 0 THEN winning_trades::decimal/total_trades*100 ELSE 0 END) as avg_win_rate
+        ROUND(AVG(total_return_pct)::numeric, 2) as avg_return,
+        ROUND(MAX(total_return_pct)::numeric, 2) as best_return,
+        ROUND(MIN(total_return_pct)::numeric, 2) as worst_return,
+        ROUND(AVG(CASE WHEN total_trades>0 THEN winning_trades::numeric/total_trades*100 ELSE 0 END)::numeric, 1) as avg_win_rate,
+        ROUND(AVG(risk_level)::numeric, 1) as avg_risk
       FROM paper_portfolios
-      GROUP BY strategy_type, risk_level
-      ORDER BY avg_return DESC
+      GROUP BY strategy_type ORDER BY avg_return DESC
     `);
-
-    const byType = {};
-    rows.forEach(r => {
-      if (!byType[r.strategy_type]) byType[r.strategy_type] = [];
-      byType[r.strategy_type].push(r);
-    });
-
-    // Risk vs return scatter data
-    const allPortfolios = await query('SELECT name, strategy_type, risk_level, total_return_pct, total_trades FROM paper_portfolios ORDER BY risk_level');
-    const scatter = allPortfolios.rows.map(p => ({
+    const scatter = await query('SELECT name, risk_level, total_return_pct, strategy_type, total_trades FROM paper_portfolios ORDER BY risk_level');
+    const scatterMapped = scatter.rows.map(p => ({
       name: p.name,
       type: p.strategy_type,
       risk: p.risk_level,
       return: parseFloat(p.total_return_pct || 0),
       trades: p.total_trades,
+      risk_level: p.risk_level,
+      total_return_pct: p.total_return_pct,
+      strategy_type: p.strategy_type
     }));
-
-    res.json({ byType, scatter });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    res.json({ byStrategy: data.rows, scatter: scatterMapped });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Best recommendation
 router.get('/best-recommendation', async (req, res) => {
   try {
-    const [bestR, worstR, daysR] = await Promise.all([
-      query('SELECT * FROM paper_portfolios ORDER BY total_return_pct DESC LIMIT 3'),
-      query('SELECT * FROM paper_portfolios ORDER BY total_return_pct ASC LIMIT 3'),
-      query('SELECT MIN(snapshot_date) as first_day, MAX(snapshot_date) as last_day, COUNT(DISTINCT snapshot_date) as days FROM paper_snapshots'),
+    const [best, byType, daysR] = await Promise.all([
+      query('SELECT * FROM paper_portfolios ORDER BY total_return_pct DESC LIMIT 1'),
+      query('SELECT strategy_type, AVG(total_return_pct) as avg FROM paper_portfolios GROUP BY strategy_type ORDER BY avg DESC'),
+      query('SELECT COUNT(DISTINCT snapshot_date) as days FROM paper_snapshots')
     ]);
-
-    const best = bestR.rows[0];
-    const days = parseInt(daysR.rows[0]?.days || 0);
-
-    let recommendation = 'Run the simulation for a few days to get meaningful recommendations.';
-    if (best && days >= 3) {
-      const returnDiff = parseFloat(best.total_return_pct || 0);
-      const winRate = best.total_trades > 0 ? Math.round(best.winning_trades / best.total_trades * 100) : 0;
-      recommendation = `After ${days} simulation days, "${best.name}" leads with ${returnDiff.toFixed(2)}% return and ${winRate}% win rate. Strategy: ${best.description}`;
-    }
-
+    const bestPortfolio = best.rows[0];
+    const realReturn = await getRealReturnPct();
+    const days = parseInt(daysR.rows[0] && daysR.rows[0].days || 0);
+    const diff = bestPortfolio ? (parseFloat(bestPortfolio.total_return_pct||0) - realReturn).toFixed(2) : 0;
     res.json({
-      best: bestR.rows,
-      worst: worstR.rows,
+      bestStrategy: bestPortfolio,
+      best: best.rows,
+      realReturn,
+      returnDiff: diff,
+      bestStrategyType: byType.rows[0],
       simulationDays: days,
-      recommendation,
+      recommendation: bestPortfolio
+        ? 'The ' + bestPortfolio.name + ' approach (' + bestPortfolio.strategy_type + ', risk ' + bestPortfolio.risk_level + '/10) has returned ' + parseFloat(bestPortfolio.total_return_pct||0).toFixed(2) + '% vs your real portfolio ' + realReturn.toFixed(2) + '%. Difference: ' + (diff > 0 ? '+' : '') + diff + '%.'
+        : 'Run simulation first to get recommendations.'
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Init
 router.post('/init', async (req, res) => {
   try {
     const result = await initPaperPortfolios();
-    res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    res.json({ success: true, ...result });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Manual simulation trigger
 router.post('/run-simulation', async (req, res) => {
   try {
-    const result = await runDailySimulation();
-    res.json(result);
-  } catch (e) { res.status(500).json({ error: e.message }); }
+    res.json({ started: true, message: 'Simulation running in background' });
+    runDailySimulation().then(r => console.log('SIM COMPLETE:', r)).catch(e => console.log('SIM ERROR:', e.message));
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// Reset (for testing)
 router.delete('/reset', async (req, res) => {
   try {
     await query('DELETE FROM paper_snapshots');
@@ -148,7 +165,7 @@ router.delete('/reset', async (req, res) => {
     await query('DELETE FROM paper_positions');
     await query('DELETE FROM paper_portfolios');
     res.json({ ok: true, message: 'All paper portfolios deleted' });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 module.exports = router;
